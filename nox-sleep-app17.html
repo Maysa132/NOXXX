@@ -1,0 +1,2877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Nox">
+<title>Nox — Sleep Planning &amp; Tracking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+:root{
+  --bg:#FBF8FE;
+  --deep:#FFFFFF;
+  --panel:#FFFFFF;
+  --panel-2:#F1EAFB;
+  --border:#E9E1F7;
+  --lavender:#BF9BDE;
+  --lavender-dim:#EFE1F8;
+  --cream:#FFF9F1;
+  --text:#3A3350;
+  --text-dim:#7C7590;
+  --text-mute:#A79FBD;
+  --fox:#BF9BDE;
+  --fox-dark:#9B6FC0;
+  --green:#3F9E6D;
+  --yellow:#C98A1D;
+  --red:#D9615C;
+  --green-bg:#E4F5EB;
+  --yellow-bg:#FBF0DA;
+  --red-bg:#FBEAE9;
+  --shadow-card:0 2px 14px rgba(191,155,222,.14);
+  --shadow-btn:0 4px 14px rgba(191,155,222,.4);
+  --radius-lg:24px;
+  --radius-md:16px;
+  --radius-sm:12px;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+html,body{background:#EFE9F9; font-family:'Nunito',sans-serif; color:var(--text); overflow-x:hidden;}
+body{display:flex; justify-content:center; padding:28px 12px; min-height:100vh; min-height:100dvh;}
+button{font-family:inherit; cursor:pointer;}
+input,select{font-family:inherit;}
+
+/* The .phone mock-device frame MUST have a bounded height (not just min-height) —
+   otherwise its flex children (.screens > .screen > .scroll) never actually need to
+   scroll internally, since the browser just keeps growing the whole box instead. That
+   was the root cause of the bottom nav drifting down the page on long content. */
+.phone{
+  width:390px; max-width:100%; background:var(--bg);
+  border-radius:36px; border:1px solid #F0EAFA; overflow:hidden;
+  box-shadow:0 30px 70px rgba(191,155,222,.22);
+  position:relative;
+  height:100vh; height:100dvh; max-height:860px;
+  display:flex; flex-direction:column;
+}
+/* On real phone-sized viewports, drop the decorative "mock device" chrome so the
+   app fills the true screen edge-to-edge like a native app — this is what actually
+   matters once it's opened on someone's phone, not just in the desktop preview. */
+@media (max-width: 480px){
+  body{ padding:0; }
+  .phone{
+    width:100%; height:100vh; height:100dvh; max-height:none;
+    border-radius:0; border:none; box-shadow:none;
+  }
+}
+.statusbar{
+  height:30px; display:flex; align-items:center; justify-content:space-between;
+  padding:0 22px; font-size:13px; color:var(--text-dim); flex-shrink:0;
+}
+.screens{ flex:1; position:relative; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+.screen{
+  display:none; flex-direction:column; flex:1; min-height:0;
+  animation:fadeIn .25s ease;
+}
+.screen.active{ display:flex; }
+@keyframes fadeIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+
+.scroll{ flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:0 22px 24px; }
+.scroll::-webkit-scrollbar{ width:0; }
+
+/* ---------- Stars bg for auth screens ---------- */
+.stars{
+  position:absolute; inset:0; pointer-events:none; opacity:.9;
+  background-image:
+    radial-gradient(1.5px 1.5px at 15% 12%, var(--cream), transparent 60%),
+    radial-gradient(1px 1px at 75% 8%, var(--cream), transparent 60%),
+    radial-gradient(1.5px 1.5px at 88% 20%, var(--cream), transparent 60%),
+    radial-gradient(1px 1px at 40% 6%, var(--cream), transparent 60%),
+    radial-gradient(1.5px 1.5px at 55% 24%, var(--cream), transparent 60%),
+    radial-gradient(1px 1px at 10% 30%, var(--cream), transparent 60%),
+    radial-gradient(1px 1px at 92% 40%, var(--cream), transparent 60%);
+}
+
+/* ---------- Typography ---------- */
+h1,h2,h3{ font-family:'Nunito',sans-serif; font-weight:700; color:var(--text); }
+.eyebrow{ font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--text-mute); font-weight:700; margin-bottom:6px; }
+.subtext{ font-size:14px; color:var(--text-dim); line-height:1.6; }
+
+/* ---------- Buttons ---------- */
+.btn{
+  width:100%; border:none; border-radius:18px; padding:15px 18px; font-size:15px; font-weight:700;
+  display:flex; align-items:center; justify-content:center; gap:8px; transition:transform .1s ease, background .15s ease, box-shadow .15s ease;
+  font-family:'Nunito',sans-serif;
+}
+.btn:active{ transform:scale(.98); }
+.btn-primary{ background:var(--lavender); color:#FFFFFF; box-shadow:var(--shadow-btn); }
+.btn-primary:hover{ background:var(--fox-dark); }
+.btn-secondary{ background:var(--panel); color:var(--text); border:1px solid var(--border); box-shadow:var(--shadow-card); }
+.btn-secondary:hover{ background:var(--panel-2); }
+.btn-ghost{ background:transparent; color:var(--lavender); border:1px solid var(--lavender-dim); }
+.btn-sm{ padding:9px 14px; font-size:13px; border-radius:12px; width:auto; }
+
+/* ---------- Inputs ---------- */
+.field{ margin-bottom:16px; }
+.field label{ display:block; font-size:13px; color:var(--text-dim); margin-bottom:7px; font-weight:600; }
+.field-required::after{ content:" *"; color:var(--fox); }
+.input-wrap{
+  background:var(--panel-2); border:1px solid var(--border); border-radius:16px;
+  display:flex; align-items:center; padding:0 14px; height:50px;
+}
+.input-wrap input, .input-wrap select{
+  background:transparent; border:none; outline:none; color:var(--text); font-size:15px; flex:1; height:100%;
+  font-family:'Nunito',sans-serif;
+}
+.input-wrap select{
+  color:var(--text); font-weight:700; cursor:pointer;
+  appearance:none; -webkit-appearance:none; -moz-appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238A78EE' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+  background-repeat:no-repeat; background-position:right 2px center; padding-right:24px;
+}
+.input-wrap select option{ background:#FFFFFF; color:var(--text); font-weight:500; }
+.input-wrap:has(select), .input-wrap.select-wrap{ background:var(--lavender-dim); border-color:var(--lavender); }
+.input-wrap input::placeholder{ color:var(--text-mute); }
+.input-wrap i{ color:var(--text-mute); font-size:14px; margin-right:8px; }
+.eye-btn{ background:none; border:none; color:var(--lavender); font-size:13px; font-weight:700; }
+.hint{ font-size:12px; color:var(--text-mute); margin-top:6px; }
+.hint.ok{ color:var(--green); }
+.hint.bad{ color:var(--red); }
+.pw-requirements{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.pw-req{
+  font-size:11px; padding:5px 10px; border-radius:20px; background:var(--panel-2); color:var(--text-mute);
+  border:1px solid var(--border); transition:background .15s ease, color .15s ease, border-color .15s ease;
+}
+.pw-req::before{ content:'○ '; }
+.pw-req.met{ background:var(--green-bg); color:var(--green); border-color:var(--green); }
+.pw-req.met::before{ content:'✓ '; }
+.error-text{ font-size:12px; color:var(--red); margin-top:6px; display:none; }
+.input-wrap.error{ border-color:var(--red); }
+
+.section-title{ font-size:12px; letter-spacing:.05em; text-transform:uppercase; color:var(--text-mute); font-weight:700; margin:22px 0 12px; }
+.section-title:first-child{ margin-top:0; }
+
+.pill-group{ display:flex; flex-wrap:wrap; gap:8px; }
+.pill{
+  padding:10px 14px; border-radius:14px; border:1px solid var(--border); background:var(--panel);
+  font-size:13px; color:var(--text-dim); font-weight:600;
+}
+.pill.selected{ background:var(--lavender); border-color:var(--lavender); color:#FFFFFF; }
+
+/* ---------- Fox mascot ---------- */
+.fox-wrap{ display:flex; justify-content:center; }
+
+/* ---------- Cards ---------- */
+.card{
+  background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px 20px;
+  margin-bottom:16px; box-shadow:var(--shadow-card); transition:transform .12s ease, box-shadow .12s ease;
+}
+.card[onclick]{ cursor:pointer; }
+.card[onclick]:active{ transform:scale(.98); box-shadow:0 1px 8px rgba(191,155,222,.14); }
+.card-title{ font-size:14px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:8px; margin-bottom:2px; }
+.card-title .tag{ font-size:11px; font-weight:700; color:var(--text-mute); text-transform:uppercase; letter-spacing:.05em; }
+
+/* ---------- Stats page ---------- */
+.period-toggle{
+  display:flex; background:var(--panel-2); border-radius:14px; padding:4px; margin-bottom:16px; gap:4px;
+}
+.period-btn{
+  flex:1; background:none; border:none; padding:9px 0; border-radius:11px; font-size:13px; font-weight:700;
+  color:var(--text-dim); font-family:'Nunito',sans-serif; cursor:pointer; transition:background .15s ease, color .15s ease;
+}
+.period-btn.selected{ background:var(--panel); color:var(--lavender); box-shadow:var(--shadow-card); }
+.stat-summary-row{ display:flex; gap:10px; margin-bottom:16px; }
+.stat-summary-card{
+  flex:1; background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:14px 10px;
+  text-align:center; box-shadow:var(--shadow-card);
+}
+.stat-summary-label{ font-size:10.5px; font-weight:700; color:var(--text-mute); text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px; }
+.stat-summary-value{ font-size:17px; font-weight:800; color:var(--text); }
+.chart-tooltip-card{
+  margin-top:12px; padding:10px 14px; border-radius:14px; background:var(--lavender-dim);
+  text-align:center; font-weight:700; color:var(--fox-dark); font-size:13px;
+  animation:fadeIn .18s ease;
+}
+
+/* ---------- Top bar within main screens ---------- */
+.topbar{ display:flex; align-items:center; justify-content:space-between; padding:6px 0 18px; }
+.topbar h2{ font-size:22px; }
+.icon-btn{
+  width:38px; height:38px; border-radius:12px; background:var(--panel); border:1px solid var(--border);
+  display:flex; align-items:center; justify-content:center; color:var(--text); font-size:16px;
+}
+
+/* ---------- Bottom nav ---------- */
+.bottomnav{
+  display:flex; background:var(--deep); border-top:1px solid var(--border); flex-shrink:0;
+  padding:10px 6px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+.navitem{
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; background:none; border:none;
+  color:var(--text-mute); font-size:10.5px; font-weight:700; padding:6px 2px 0; font-family:'Nunito',sans-serif;
+  transition:transform .12s ease;
+}
+.navitem:active{ transform:scale(.92); }
+.navitem .icon-slot{
+  width:34px; height:34px; display:flex; align-items:center; justify-content:center; border-radius:14px;
+  transition:background .18s ease, box-shadow .18s ease;
+}
+.navitem svg{ width:22px; height:22px; display:block; }
+.navitem svg .nav-stroke{ stroke:var(--text-mute); transition:stroke .18s ease, fill .18s ease; }
+.navitem svg .nav-fill{ fill:var(--text-mute); transition:fill .18s ease; }
+.navitem.active{ color:var(--lavender); }
+.navitem.active .icon-slot{ background:var(--lavender-dim); }
+.navitem.active svg .nav-stroke{ stroke:var(--lavender); }
+.navitem.active svg .nav-fill{ fill:var(--lavender); }
+.navitem .center-icon{
+  width:50px; height:50px; border-radius:50%; background:var(--lavender);
+  display:flex; align-items:center; justify-content:center; margin-top:-28px;
+  border:4px solid var(--deep); box-shadow:0 4px 14px rgba(191,155,222,.38); transition:box-shadow .2s ease, background .2s ease, transform .2s ease;
+}
+.navitem.active .center-icon{ background:var(--fox-dark); box-shadow:0 6px 18px 2px rgba(191,155,222,.5); animation:noxPulse .5s ease; }
+@keyframes noxPulse{ 0%{ transform:scale(1); } 40%{ transform:scale(1.12); } 100%{ transform:scale(1); } }
+.navitem .center-icon svg{ width:26px; height:26px; }
+.navitem .center-icon svg .nav-fill{ fill:#FFFFFF; }
+.navitem .center-icon svg .nav-muzzle{ fill:#FFFFFF; opacity:.92; }
+.navitem .center-icon svg .nav-eye{ fill:var(--fox-dark); }
+
+/* ---------- Home hero decoration ---------- */
+.home-hero{ position:relative; }
+.home-hero-deco{ position:absolute; top:-6px; right:0; width:180px; height:60px; pointer-events:none; z-index:0; }
+.home-hero .topbar{ position:relative; z-index:1; }
+
+/* ---------- Misc ---------- */
+.divider{ height:1px; background:var(--border); margin:14px 0; }
+.row-between{ display:flex; align-items:center; justify-content:space-between; }
+.chip{ font-size:11px; font-weight:600; padding:4px 10px; border-radius:20px; }
+.chip-green{ background:var(--green-bg); color:var(--green); }
+.chip-yellow{ background:var(--yellow-bg); color:var(--yellow); }
+.chip-red{ background:var(--red-bg); color:var(--red); }
+.linklike{ color:var(--lavender); font-size:13px; font-weight:700; background:none; border:none; outline:none; padding:0; font-family:'Nunito',sans-serif; cursor:pointer; }
+.empty-state{ text-align:center; padding:36px 10px; color:var(--text-dim); }
+.empty-state .fox-wrap{ margin-bottom:14px; }
+.empty-state h3{ font-size:16px; margin-bottom:6px; color:var(--text); }
+.empty-state p{ font-size:13px; color:var(--text-mute); margin-bottom:16px; line-height:1.6; }
+
+.modal-overlay{
+  position:absolute; inset:0; background:rgba(6,7,20,.7); display:none; align-items:flex-end; justify-content:center; z-index:50;
+}
+.modal-overlay.active{ display:flex; }
+.modal-sheet{
+  background:var(--bg); border:1px solid var(--border); border-radius:24px 24px 0 0; padding:22px; width:100%;
+  animation:slideUp .25s ease;
+}
+@keyframes slideUp{ from{ transform:translateY(30px); opacity:0;} to{ transform:translateY(0); opacity:1;} }
+.modal-handle{ width:36px; height:4px; background:var(--border); border-radius:4px; margin:0 auto 16px; }
+
+.toast{
+  position:absolute; bottom:100px; left:22px; right:22px; background:var(--panel-2); border:1px solid var(--border);
+  border-radius:14px; padding:12px 16px; font-size:13px; text-align:center; opacity:0; pointer-events:none;
+  transition:opacity .25s ease, transform .25s ease; transform:translateY(10px); z-index:60;
+}
+.toast.show{ opacity:1; transform:translateY(0); }
+
+/* ---------- Toggle switch ---------- */
+.toggle{
+  width:46px; height:26px; border-radius:16px; background:var(--panel-2); border:1px solid var(--border);
+  position:relative; flex-shrink:0; padding:0; transition:background .2s ease, border-color .2s ease;
+}
+.toggle .toggle-knob{
+  position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:var(--text-mute);
+  transition:transform .2s ease, background .2s ease;
+}
+.toggle.on{ background:var(--lavender-dim); border-color:var(--lavender); }
+.toggle.on .toggle-knob{ transform:translateX(20px); background:var(--lavender); }
+
+/* ---------- Avatar upload ---------- */
+.avatar-wrap{ position:relative; width:54px; height:54px; cursor:pointer; flex-shrink:0; }
+.avatar-circle{
+  width:54px; height:54px; border-radius:50%; background:var(--panel-2); overflow:hidden;
+  display:flex; align-items:center; justify-content:center; border:1px solid var(--border);
+}
+.avatar-circle svg{ width:100%; height:100%; }
+.avatar-circle img.avatar-photo-img{ width:100%; height:100%; object-fit:cover; }
+.avatar-edit-badge{
+  position:absolute; bottom:-2px; right:-2px; width:20px; height:20px; border-radius:50%;
+  background:var(--lavender); color:#FFFFFF; font-size:10px; display:flex; align-items:center; justify-content:center;
+  border:2px solid var(--bg);
+}
+
+/* ---------- Onboarding ---------- */
+.ob-panel{ display:none; flex-direction:column; flex:1; }
+.ob-panel.active{ display:flex; }
+.ob-top{ display:flex; justify-content:flex-end; padding:14px 4px 0; }
+.ob-skip{ background:none; border:none; color:var(--text-mute); font-size:13px; font-weight:500; }
+.ob-illustration{ display:flex; justify-content:center; align-items:center; margin-bottom:22px; min-height:150px; }
+.ob-dots{ display:flex; justify-content:center; gap:7px; padding:14px 0; }
+.ob-dot{ width:7px; height:7px; border-radius:50%; background:var(--panel-2); border:1px solid var(--border); transition:background .2s ease, width .2s ease; }
+.ob-dot.active{ background:var(--lavender); width:20px; border-radius:5px; border-color:var(--lavender); }
+.ob-navrow{ padding:0 22px 22px; }
+
+.tip-card{
+  display:flex; gap:12px; background:var(--panel); border:1px solid var(--border); border-radius:14px;
+  padding:14px 16px; margin-bottom:10px; align-items:flex-start;
+}
+.tip-card .tip-icon{ font-size:18px; flex-shrink:0; margin-top:1px; }
+.tip-card p{ font-size:13px; color:var(--text-dim); line-height:1.6; }
+
+.nav-preview-row{
+  display:flex; align-items:center; gap:14px; padding:12px 4px; border-bottom:1px solid var(--border);
+}
+.nav-preview-row:last-child{ border-bottom:none; }
+.nav-preview-row .icon-slot{ width:34px; height:34px; border-radius:12px; background:var(--panel-2); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.nav-preview-row .icon-slot svg{ width:20px; height:20px; }
+.nav-preview-row svg .nav-stroke{ stroke:var(--lavender); }
+.nav-preview-row svg .nav-fill{ fill:var(--lavender); }
+.nav-preview-title{ font-size:14px; font-weight:600; color:var(--text); }
+.nav-preview-sub{ font-size:12px; color:var(--text-mute); margin-top:2px; }
+
+.dash-chip-row{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
+.dash-chip{
+  background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:10px 14px;
+  font-size:12.5px; font-weight:600; color:var(--text-dim); display:flex; align-items:center; gap:6px;
+}
+
+.timeline-row{ display:flex; gap:8px; align-items:flex-end; justify-content:center; height:90px; }
+.timeline-col{ display:flex; flex-direction:column; align-items:center; gap:6px; width:44px; }
+.timeline-bar{ width:20px; border-radius:5px 5px 0 0; background:var(--panel-2); }
+.timeline-bar.highlight{ background:var(--fox); }
+.timeline-label{ font-size:10px; color:var(--text-mute); }
+.timeline-label.highlight{ color:var(--fox); font-weight:600; }
+
+/* ---------- Terms & Privacy ---------- */
+.consent-row{
+  display:flex; align-items:flex-start; gap:12px; padding:12px 4px; cursor:pointer;
+}
+.consent-box{
+  width:20px; height:20px; border-radius:6px; border:2px solid var(--text-mute); flex-shrink:0; margin-top:1px;
+  display:flex; align-items:center; justify-content:center; transition:background .15s ease, border-color .15s ease;
+}
+.consent-box.checked{ background:var(--lavender); border-color:var(--lavender); }
+.consent-box.checked::after{ content:'✓'; color:#FFFFFF; font-size:13px; font-weight:700; }
+.consent-row p{ font-size:13px; color:var(--text-dim); line-height:1.6; }
+.data-chip-group{ display:flex; flex-wrap:wrap; gap:6px; }
+.data-chip{ font-size:11.5px; padding:5px 10px; border-radius:20px; background:var(--panel-2); color:var(--text-dim); border:1px solid var(--border); }
+.privacy-list{ margin:0; padding-left:18px; }
+.privacy-list li{ font-size:13px; color:var(--text-dim); line-height:1.8; }
+
+/* ---------- Sleep insight callouts ---------- */
+.insight-box{
+  background:var(--panel-2); border:1px solid var(--border); border-radius:12px; padding:12px 14px;
+  font-size:13px; color:var(--text-dim); line-height:1.6; margin-bottom:8px;
+}
+.insight-box.good{ border-color:var(--green); background:var(--green-bg); color:var(--text); }
+.insight-box.warn{ border-color:var(--yellow); background:var(--yellow-bg); color:var(--text); }
+.insight-box.info{ border-color:var(--lavender-dim); background:#20244A; color:var(--text); }
+.insight-box.neutral{ border-color:var(--border); background:var(--panel-2); color:var(--text-dim); }
+
+/* ---------- Sleep cycle selector ---------- */
+.cycle-option{
+  display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:14px;
+  background:var(--panel); border:1px solid var(--border); margin-bottom:8px; cursor:pointer;
+  transition:background .15s ease, border-color .15s ease;
+}
+.cycle-option.selected{ background:var(--lavender-dim); border-color:var(--lavender); }
+.cycle-radio{
+  width:18px; height:18px; border-radius:50%; border:2px solid var(--text-mute); flex-shrink:0;
+  display:flex; align-items:center; justify-content:center; transition:border-color .15s ease;
+}
+.cycle-radio.checked{ border-color:var(--lavender); }
+.cycle-radio.checked::after{ content:''; width:9px; height:9px; border-radius:50%; background:var(--lavender); }
+.cycle-info{ flex:1; display:flex; flex-direction:column; gap:3px; }
+.cycle-title{ font-size:14px; font-weight:600; color:var(--text); }
+.cycle-rec-badge{
+  font-size:10.5px; font-weight:600; color:var(--green); background:var(--green-bg);
+  padding:2px 8px; border-radius:20px; align-self:flex-start;
+}
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="statusbar"><span id="statusbar-clock">9:41</span><span>Nox</span></div>
+  <div class="screens" id="screens">
+
+    <!-- ============ LOADING ============ -->
+    <section class="screen active" id="screen-loading" style="position:relative; align-items:center; justify-content:center;">
+      <div class="stars"></div>
+      <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+        <svg width="72" height="72" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" style="animation:fadeIn .6s ease;">
+                    <path d="M42 53 L32 24 L59 39 Z" fill="#D2B8E8"/>
+          <path d="M86 53 L96 24 L69 39 Z" fill="#D2B8E8"/>
+          <ellipse cx="64" cy="74" rx="32" ry="29" fill="#D2B8E8"/>
+          <path d="M51 70 Q55.5 65.5 60 70" stroke="#4A3F66" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+          <path d="M68 70 Q72.5 65.5 77 70" stroke="#4A3F66" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+          <path d="M41 78 L28 76 M40.5 81 L27 82" stroke="#4A3F66" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+          <path d="M87 78 L100 76 M87.5 81 L101 82" stroke="#4A3F66" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+          <path d="M64 74 L60.5 79 L67.5 79 Z" fill="#EFA0B4"/>
+        </svg>
+        <p class="subtext" style="margin-top:14px;">Waking Nox up…</p>
+      </div>
+    </section>
+
+    <!-- ============ ONBOARDING ============ -->
+    <section class="screen" id="screen-onboarding" style="position:relative;">
+      <div class="ob-top">
+        <button class="ob-skip" onclick="skipOnboarding()">Skip</button>
+      </div>
+      <div class="scroll" style="padding-top:6px; flex:1; display:flex; flex-direction:column;">
+
+        <!-- 1. Welcome -->
+        <div class="ob-panel active" data-step="0" style="flex:1; justify-content:center;">
+          <div class="ob-illustration">
+            <svg width="118" height="118" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M42 54 L30 22 L60 40 Z" fill="#D2B8E8"/>
+              <path d="M86 54 L98 22 L68 40 Z" fill="#D2B8E8"/>
+              <path d="M44 48 L37 28 L56 39 Z" fill="#F6BFCB"/>
+              <path d="M84 48 L91 28 L72 39 Z" fill="#F6BFCB"/>
+              <ellipse cx="64" cy="74" rx="32" ry="29" fill="#D2B8E8"/>
+              <circle cx="43" cy="82" r="4.2" fill="#F6BFCB" opacity=".7"/>
+              <circle cx="85" cy="82" r="4.2" fill="#F6BFCB" opacity=".7"/>
+              <circle cx="55.5" cy="70" r="3.4" fill="#4A3F66"/>
+              <circle cx="72.5" cy="70" r="3.4" fill="#4A3F66"/>
+              <path d="M40 76 L24 73 M39.5 80 L22 80 M40 84 L24 87" stroke="#4A3F66" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+              <path d="M88 76 L104 73 M88.5 80 L106 80 M88 84 L104 87" stroke="#4A3F66" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+              <path d="M64 74 L60.5 79 L67.5 79 Z" fill="#EFA0B4"/>
+              <path d="M60.5 79 Q64 82.5 67.5 79" stroke="#4A3F66" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h1 style="text-align:center; font-size:24px; margin-bottom:12px;">Welcome to Nox</h1>
+          <p class="subtext" style="text-align:center; padding:0 8px;">Nox helps you understand your sleep debt and plan your sleep ahead — for the days you know you won't get enough rest.</p>
+        </div>
+
+        <!-- 2. Sleep Debt -->
+        <div class="ob-panel" data-step="1" style="flex:1; justify-content:center;">
+          <div class="ob-illustration">
+            <svg width="200" height="110" viewBox="0 0 200 110">
+              <path d="M14 100 A86 86 0 0 1 186 100" stroke="#EDE6FA" stroke-width="14" fill="none" stroke-linecap="round"/>
+              <path d="M14 100 A86 86 0 0 1 130 20" stroke="#D9615C" stroke-width="14" fill="none" stroke-linecap="round"/>
+              <path d="M130 20 A86 86 0 0 1 165 45" stroke="#C98A1D" stroke-width="14" fill="none" stroke-linecap="round"/>
+              <path d="M165 45 A86 86 0 0 1 186 100" stroke="#3F9E6D" stroke-width="14" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h1 style="text-align:center; font-size:22px; margin-bottom:12px;">Understand your sleep debt</h1>
+          <p class="subtext" style="text-align:center; padding:0 8px;">Sleep debt is how much sleep you're missing compared to what your body personally needs.</p>
+        </div>
+
+        <!-- 3. Recovery -->
+        <div class="ob-panel" data-step="2" style="flex:1; justify-content:center;">
+          <div class="ob-illustration">
+            <div class="timeline-row">
+              <div class="timeline-col"><div class="timeline-bar" style="height:26px;"></div><div class="timeline-label">Mon</div></div>
+              <div class="timeline-col"><div class="timeline-bar" style="height:34px;"></div><div class="timeline-label">Tue</div></div>
+              <div class="timeline-col"><div class="timeline-bar" style="height:44px;"></div><div class="timeline-label">Wed</div></div>
+              <div class="timeline-col"><div class="timeline-bar" style="height:54px;"></div><div class="timeline-label">Thu</div></div>
+              <div class="timeline-col"><div class="timeline-bar highlight" style="height:64px;"></div><div class="timeline-label highlight">Fri · Exam</div></div>
+            </div>
+          </div>
+          <h1 style="text-align:center; font-size:22px; margin-bottom:12px;">Plan ahead for busy days</h1>
+          <p class="subtext" style="text-align:center; padding:0 8px;">Have an exam on Friday and expect to sleep less? Nox helps you sleep a little extra in the nights before.</p>
+        </div>
+
+        <!-- 4. Logging -->
+        <div class="ob-panel" data-step="3" style="flex:1; justify-content:center;">
+          <div class="ob-illustration">
+            <div class="card" style="width:220px; margin:0;">
+              <div class="row-between" style="padding:4px 0;"><span class="subtext">Date</span><span style="font-weight:600; font-size:13px;">Aug 10</span></div>
+              <div class="row-between" style="padding:4px 0;"><span class="subtext">Bedtime</span><span style="font-weight:600; font-size:13px;">11:00 PM</span></div>
+              <div class="row-between" style="padding:4px 0;"><span class="subtext">Wake-up</span><span style="font-weight:600; font-size:13px;">6:30 AM</span></div>
+              <div class="divider"></div>
+              <div class="row-between" style="padding:4px 0;"><span class="subtext">Actual sleep</span><span style="font-weight:700; color:var(--lavender);">7 hr 30m</span></div>
+            </div>
+          </div>
+          <h1 style="text-align:center; font-size:22px; margin-bottom:12px;">Log your sleep</h1>
+          <p class="subtext" style="text-align:center; padding:0 8px;">Record your bedtime and wake-up time so Nox can understand your sleep history — this comes from you, not a guess.</p>
+        </div>
+
+        <!-- 5. Home -->
+        <div class="ob-panel" data-step="4" style="flex:1; justify-content:center;">
+          <div class="ob-illustration">
+            <div class="dash-chip-row" style="max-width:260px;">
+              <div class="dash-chip">😴 Sleep debt</div>
+              <div class="dash-chip">🌙 Tonight plan</div>
+              <div class="dash-chip">📅 Upcoming event</div>
+              <div class="dash-chip">💪 Recovery plan</div>
+            </div>
+          </div>
+          <h1 style="text-align:center; font-size:22px; margin-bottom:12px;">Your sleep dashboard</h1>
+          <p class="subtext" style="text-align:center; padding:0 8px;">See your current sleep condition and sleep plan in one place, every time you open Nox.</p>
+        </div>
+
+        <!-- 6. Navigation -->
+        <div class="ob-panel" data-step="5" style="flex:1;">
+          <h1 style="text-align:center; font-size:22px; margin-bottom:6px;">Getting around Nox</h1>
+          <p class="subtext" style="text-align:center; padding:0 8px 14px;">Five tabs, always one tap away.</p>
+          <div class="card" style="margin-top:0;">
+            <div class="nav-preview-row">
+              <div class="icon-slot"><svg viewBox="0 0 24 24" fill="none"><path d="M3 18.2 V8.6 a1.6 1.6 0 0 1 1.6-1.6 h3.8 a1.6 1.6 0 0 1 1.6 1.6 V12.4" class="nav-stroke" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 12.4 h9.5 a1 1 0 0 1 1 1 v4.8" class="nav-stroke" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="4.6" y="9.2" width="4" height="3" rx="1" class="nav-fill"/><path d="M2.5 18.2 h19" class="nav-stroke" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+              <div><div class="nav-preview-title">Logging</div><div class="nav-preview-sub">Record your sleep</div></div>
+            </div>
+            <div class="nav-preview-row">
+              <div class="icon-slot"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="13" width="3.4" height="7" rx="1.3" class="nav-fill"/><rect x="10.3" y="9" width="3.4" height="11" rx="1.3" class="nav-fill"/><rect x="16.6" y="5" width="3.4" height="15" rx="1.3" class="nav-fill"/></svg></div>
+              <div><div class="nav-preview-title">Stats</div><div class="nav-preview-sub">View your sleep history and trends</div></div>
+            </div>
+            <div class="nav-preview-row">
+              <div class="icon-slot"><svg viewBox="0 0 24 24" fill="none"><path d="M6.4 8.6 L3.2 2.8 L9.6 6.4 Z" class="nav-fill"/><path d="M17.6 8.6 L20.8 2.8 L14.4 6.4 Z" class="nav-fill"/><circle cx="12" cy="13.2" r="8.6" class="nav-fill"/></svg></div>
+              <div><div class="nav-preview-title">Home</div><div class="nav-preview-sub">See your sleep debt and tonight plan</div></div>
+            </div>
+            <div class="nav-preview-row">
+              <div class="icon-slot"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5.5" width="16" height="14" rx="2.4" class="nav-stroke" stroke-width="1.9" fill="none"/><line x1="4" y1="9.6" x2="20" y2="9.6" class="nav-stroke" stroke-width="1.7"/><line x1="8" y1="3.4" x2="8" y2="7" class="nav-stroke" stroke-width="1.7" stroke-linecap="round"/><line x1="16" y1="3.4" x2="16" y2="7" class="nav-stroke" stroke-width="1.7" stroke-linecap="round"/><path d="M14.6 12.2 a2.6 2.6 0 1 0 0 5.2 a3.2 3.2 0 1 1 0-5.2z" class="nav-fill"/></svg></div>
+              <div><div class="nav-preview-title">Event</div><div class="nav-preview-sub">Add events and plan recovery sleep</div></div>
+            </div>
+            <div class="nav-preview-row">
+              <div class="icon-slot"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="9.6" r="3.9" class="nav-fill"/><path d="M5.2 20c0-3.9 3.06-6.9 6.8-6.9s6.8 3 6.8 6.9" class="nav-stroke" stroke-width="1.9" stroke-linecap="round" fill="none"/></svg></div>
+              <div><div class="nav-preview-title">Me</div><div class="nav-preview-sub">Manage your profile and settings</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 7. Tips -->
+        <div class="ob-panel" data-step="6" style="flex:1;">
+          <h1 style="text-align:center; font-size:22px; margin-bottom:14px;">A few tips to get started</h1>
+          <div class="tip-card"><span class="tip-icon">💡</span><p>Log your sleep regularly so Nox has enough information to understand your pattern.</p></div>
+          <div class="tip-card"><span class="tip-icon">💡</span><p>Know you'll sleep less on a future day? Create an event and let Nox plan extra sleep for you.</p></div>
+          <div class="tip-card"><span class="tip-icon">💡</span><p>Visit Stat to see how your sleep pattern changes over time.</p></div>
+          <div class="tip-card"><span class="tip-icon">💡</span><p>Tonight Plan recommends when to sleep based on your current condition.</p></div>
+          <div class="tip-card"><span class="tip-icon">💡</span><p>Made a mistake while logging? You can edit any previous sleep record.</p></div>
+        </div>
+
+      </div>
+      <div class="ob-dots" id="ob-dots"></div>
+      <div class="ob-navrow">
+        <button class="btn btn-primary" id="ob-next-btn" onclick="obNext()">Next</button>
+      </div>
+    </section>
+
+    <!-- ============ TERMS & PRIVACY ============ -->
+    <section class="screen" id="screen-terms" style="position:relative;">
+      <div class="scroll" style="padding-top:26px;">
+        <h1 style="font-size:24px; margin-bottom:6px;">Before you get started</h1>
+        <p class="subtext" style="margin-bottom:20px;">Please review and understand how Nox works and how your information is used before you start.</p>
+
+        <div class="section-title" style="margin-top:0;">Terms &amp; conditions</div>
+        <ul class="privacy-list" style="margin-bottom:10px;">
+          <li>Nox is a sleep tracking and sleep planning application.</li>
+          <li>Nox helps users understand their sleep debt and plan their sleep.</li>
+          <li>Results are intended to help you understand and plan your sleep — not as medical guidance.</li>
+          <li>Nox is not a medical diagnosis or treatment tool.</li>
+          <li>Results depend on the information you provide.</li>
+          <li>Accurate information leads to more appropriate results.</li>
+          <li>You can update or correct your information at any time.</li>
+        </ul>
+        <button class="linklike" style="margin-bottom:18px;" onclick="document.getElementById('modal-terms-full').classList.add('active')">Read full Terms &amp; Conditions</button>
+
+        <div class="section-title">Your privacy matters</div>
+        <p class="subtext" style="margin-bottom:10px;">Nox may collect information you provide to create your profile, calculate sleep-related information, and personalize your experience.</p>
+        <div class="data-chip-group" style="margin-bottom:18px;">
+          <span class="data-chip">Name</span><span class="data-chip">Username</span><span class="data-chip">Password</span>
+          <span class="data-chip">Birth date</span><span class="data-chip">Gender</span><span class="data-chip">Exercise frequency</span>
+          <span class="data-chip">Target wake-up time</span><span class="data-chip">Bedtime / wake-up</span>
+          <span class="data-chip">Sleep logs</span><span class="data-chip">Event info</span><span class="data-chip">Profile picture</span>
+        </div>
+
+        <div class="section-title">How your information is used</div>
+        <ul class="privacy-list" style="margin-bottom:18px;">
+          <li>Create and manage your Nox account</li>
+          <li>Build your personalized sleep profile</li>
+          <li>Calculate sleep debt and average sleep</li>
+          <li>Display sleep history and statistics</li>
+          <li>Calculate extra-sleep recovery plans</li>
+          <li>Create your tonight plan</li>
+          <li>Provide personalized AI advice</li>
+          <li>Improve your experience within Nox</li>
+        </ul>
+
+        <div class="card" style="margin-bottom:14px;">
+          <div class="card-title">Sleep data privacy</div>
+          <p class="subtext" style="margin-top:6px;">Your sleep records help Nox calculate your sleep debt, statistics, recovery plans, and tonight plan. This data comes from what you record yourself — Nox never invents missing sleep data.</p>
+        </div>
+        <div class="card" style="margin-bottom:14px;">
+          <div class="card-title">AI advice &amp; privacy</div>
+          <p class="subtext" style="margin-top:6px;">AI Advice uses relevant information from Nox — like your sleep history and upcoming events — to give personalized recommendations. It supports your understanding and planning, and is never a medical diagnosis or treatment.</p>
+        </div>
+        <div class="card" style="margin-bottom:20px;">
+          <div class="card-title">Data security</div>
+          <p class="subtext" style="margin-top:6px;">We take reasonable steps to help protect your personal information and keep your data secure. No system can guarantee data is 100% secure.</p>
+        </div>
+
+        <div class="section-title">Your rights</div>
+        <ul class="privacy-list" style="margin-bottom:8px;">
+          <li>Access your personal information</li>
+          <li>Request correction of inaccurate information</li>
+          <li>Request deletion where applicable</li>
+          <li>Manage your consent where applicable</li>
+          <li>Ask how your information is being used</li>
+        </ul>
+        <button class="linklike" style="margin-bottom:22px;" onclick="document.getElementById('modal-privacy-full').classList.add('active')">View Privacy Policy</button>
+
+        <div class="divider"></div>
+
+        <div class="consent-row" onclick="toggleConsent('c1')">
+          <div class="consent-box" id="consent-c1"></div>
+          <p>I have read and understood the Nox Terms &amp; Conditions.</p>
+        </div>
+        <div class="consent-row" onclick="toggleConsent('c2')">
+          <div class="consent-box" id="consent-c2"></div>
+          <p>I have read and understood the Nox Privacy Policy.</p>
+        </div>
+        <div class="consent-row" onclick="toggleConsent('c3')">
+          <div class="consent-box" id="consent-c3"></div>
+          <p>I understand how Nox collects and uses my personal information.</p>
+        </div>
+
+        <button class="btn btn-primary" id="agree-btn" style="margin-top:18px; opacity:.4; pointer-events:none;" onclick="agreeAndContinue()">Agree &amp; Continue</button>
+      </div>
+    </section>
+
+    <!-- ============ WELCOME ============ -->
+    <section class="screen" id="screen-welcome" style="position:relative;">
+      <div class="stars"></div>
+      <div class="scroll" style="display:flex; flex-direction:column; justify-content:center; flex:1;">
+        <div class="fox-wrap" style="margin-bottom:18px;">
+          <svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="64" cy="64" r="62" fill="#EFE7FB"/>
+                        <path d="M42 54 L30 22 L60 40 Z" fill="#D2B8E8"/>
+            <path d="M86 54 L98 22 L68 40 Z" fill="#D2B8E8"/>
+            <path d="M44 48 L37 28 L56 39 Z" fill="#F6BFCB"/>
+            <path d="M84 48 L91 28 L72 39 Z" fill="#F6BFCB"/>
+            <ellipse cx="64" cy="74" rx="32" ry="29" fill="#D2B8E8"/>
+            <circle cx="43" cy="82" r="4.2" fill="#F6BFCB" opacity=".7"/>
+            <circle cx="85" cy="82" r="4.2" fill="#F6BFCB" opacity=".7"/>
+            <circle cx="55.5" cy="70" r="3.4" fill="#4A3F66"/>
+            <circle cx="72.5" cy="70" r="3.4" fill="#4A3F66"/>
+            <path d="M40 76 L24 73 M39.5 80 L22 80 M40 84 L24 87" stroke="#4A3F66" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+            <path d="M88 76 L104 73 M88.5 80 L106 80 M88 84 L104 87" stroke="#4A3F66" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+            <path d="M64 74 L60.5 79 L67.5 79 Z" fill="#EFA0B4"/>
+            <path d="M60.5 79 Q64 82.5 67.5 79" stroke="#4A3F66" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+            <circle cx="94" cy="34" r="9" fill="#9B6FC0" opacity=".85"/>
+            <circle cx="30" cy="46" r="2" fill="#9B6FC0"/>
+            <circle cx="100" cy="52" r="1.6" fill="#9B6FC0"/>
+          </svg>
+        </div>
+        <h1 style="text-align:center; font-size:30px; margin-bottom:10px;">Welcome to Nox</h1>
+        <p class="subtext" style="text-align:center; padding:0 12px 34px;">Your calm companion for better sleep — plan tonight, track your rest, and wake up recovered.</p>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <button class="btn btn-primary" onclick="goTo('screen-login')">Log in</button>
+          <button class="btn btn-secondary" onclick="goTo('screen-signup')">Sign up</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ LOGIN ============ -->
+    <section class="screen" id="screen-login" style="position:relative;">
+      <div class="scroll" style="padding-top:26px;">
+        <button class="icon-btn" onclick="goTo('screen-welcome')" style="margin-bottom:22px;"><i class="ti ti-arrow-left"></i>&#8592;</button>
+        <h1 style="font-size:26px; margin-bottom:6px;">Welcome back</h1>
+        <p class="subtext" style="margin-bottom:28px;">Log in to see tonight's sleep plan.</p>
+
+        <div class="field">
+          <label>Username</label>
+          <div class="input-wrap"><input type="text" id="login-username" placeholder="Enter your username"></div>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <div class="input-wrap">
+            <input type="password" id="login-password" placeholder="Enter your password">
+            <button class="eye-btn" onclick="togglePw('login-password', this)">Show</button>
+          </div>
+          <p class="error-text" id="login-error">Please enter your username and password.</p>
+        </div>
+        <button class="btn btn-primary" style="margin-top:8px;" onclick="doLogin()">Log in</button>
+      </div>
+    </section>
+
+    <!-- ============ SIGNUP / PROFILE SETUP ============ -->
+    <section class="screen" id="screen-signup" style="position:relative;">
+      <div class="scroll" style="padding-top:26px;">
+        <button class="icon-btn" onclick="goTo('screen-welcome')" style="margin-bottom:22px;">&#8592;</button>
+        <h1 style="font-size:26px; margin-bottom:6px;">Create your profile</h1>
+        <p class="subtext" style="margin-bottom:10px;">Tell us a little about yourself to personalize your sleep plan.</p>
+
+        <div class="section-title">Account information</div>
+        <div class="field">
+          <label class="field-required">Username</label>
+          <div class="input-wrap" id="su-username-wrap"><input type="text" id="su-username" placeholder="Create a username" autocomplete="off"></div>
+          <p class="hint" id="su-username-status"></p>
+        </div>
+        <div class="field">
+          <label class="field-required">Password</label>
+          <div class="input-wrap">
+            <input type="password" id="su-password" placeholder="Create a password">
+            <button class="eye-btn" onclick="togglePw('su-password', this)">Show</button>
+          </div>
+          <div class="pw-requirements" id="pw-requirements">
+            <span class="pw-req" data-rule="len">At least 8 characters</span>
+            <span class="pw-req" data-rule="upper">Uppercase letter</span>
+            <span class="pw-req" data-rule="lower">Lowercase letter</span>
+            <span class="pw-req" data-rule="num">Number</span>
+            <span class="pw-req" data-rule="special">Special character</span>
+          </div>
+        </div>
+
+        <div class="section-title">Personal information</div>
+        <div class="field">
+          <label class="field-required">Name</label>
+          <div class="input-wrap"><input type="text" id="su-name" placeholder="Your name"></div>
+        </div>
+        <div class="field">
+          <label class="field-required">Date of birth</label>
+          <div class="input-wrap"><input type="date" id="su-dob"></div>
+        </div>
+        <div class="field">
+          <label class="field-required">Gender</label>
+          <div class="pill-group" id="su-gender">
+            <div class="pill" data-val="Male" onclick="selectPill('su-gender', this)">Male</div>
+            <div class="pill" data-val="Female" onclick="selectPill('su-gender', this)">Female</div>
+            <div class="pill" data-val="Other" onclick="selectPill('su-gender', this)">Other</div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-required">Exercise frequency</label>
+          <div class="input-wrap select-wrap">
+            <select id="su-exercise">
+              <option value="rarely">Rarely</option>
+              <option value="1-2">1–2 days/week</option>
+              <option value="3-4">3–4 days/week</option>
+              <option value="5-6">5–6 days/week</option>
+              <option value="daily">Every day</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-required">Target wake-up time</label>
+          <div class="input-wrap"><input type="time" id="su-wake" value="07:00"></div>
+        </div>
+
+        <p class="error-text" id="su-error">Please fill in all required fields.</p>
+        <button class="btn btn-primary" style="margin-top:6px;" onclick="saveProfile()">Save information</button>
+      </div>
+    </section>
+
+    <!-- ============ GET STARTED ============ -->
+    <section class="screen" id="screen-getstarted" style="position:relative;">
+      <div class="stars"></div>
+      <div class="scroll" style="display:flex; flex-direction:column; justify-content:center; align-items:center; flex:1; text-align:center;">
+        <div class="fox-wrap" style="margin-bottom:20px;">
+          <svg width="110" height="110" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M42 54 L30 22 L60 40 Z" fill="#D2B8E8"/>
+            <path d="M86 54 L98 22 L68 40 Z" fill="#D2B8E8"/>
+            <path d="M44 48 L37 28 L56 39 Z" fill="#F6BFCB"/>
+            <path d="M84 48 L91 28 L72 39 Z" fill="#F6BFCB"/>
+            <ellipse cx="64" cy="74" rx="32" ry="29" fill="#D2B8E8"/>
+            <path d="M51 70 Q55.5 65.5 60 70" stroke="#4A3F66" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+            <path d="M68 70 Q72.5 65.5 77 70" stroke="#4A3F66" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+            <path d="M40 76 L24 73 M39.5 80 L22 80 M40 84 L24 87" stroke="#4A3F66" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+            <path d="M88 76 L104 73 M88.5 80 L106 80 M88 84 L104 87" stroke="#4A3F66" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+            <path d="M64 74 L60.5 79 L67.5 79 Z" fill="#EFA0B4"/>
+            <path d="M60.5 79 Q64 82.5 67.5 79" stroke="#4A3F66" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h1 style="font-size:24px; margin-bottom:10px;" id="gs-name">You're all set!</h1>
+        <p class="subtext" style="padding:0 10px 30px;">Nox has your profile ready. Let's plan your first night of better sleep.</p>
+        <button class="btn btn-primary" onclick="enterApp()">Get started</button>
+      </div>
+    </section>
+
+    <!-- ============ HOME ============ -->
+    <section class="screen" id="screen-home">
+      <div class="scroll" style="padding-top:18px;">
+        <div class="home-hero">
+          <svg class="home-hero-deco" viewBox="0 0 400 90" preserveAspectRatio="none" aria-hidden="true">
+            <circle cx="358" cy="14" r="2.6" fill="#D2B8E8" opacity=".8"/>
+            <circle cx="378" cy="34" r="1.8" fill="#D2B8E8" opacity=".55"/>
+            <circle cx="336" cy="40" r="1.6" fill="#D2B8E8" opacity=".6"/>
+            <path d="M314 8 a9 9 0 1 0 0 18 a11.5 11.5 0 1 1 0-18z" fill="#EFE1F8"/>
+          </svg>
+          <div class="topbar">
+            <div>
+              <div class="eyebrow" id="home-greeting-eyebrow">Good evening</div>
+              <h2 id="home-greeting-name">Hi, Friend</h2>
+            </div>
+            <div class="avatar-wrap" style="width:42px; height:42px;" onclick="setNav('screen-me')">
+              <div class="avatar-circle" style="width:42px; height:42px;">
+                <svg class="avatar-default-fox" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M42 53 L32 24 L59 39 Z" fill="#D2B8E8"/>
+                  <path d="M86 53 L96 24 L69 39 Z" fill="#D2B8E8"/>
+                  <ellipse cx="64" cy="74" rx="32" ry="29" fill="#D2B8E8"/>
+                  <circle cx="55.5" cy="70" r="3.4" fill="#4A3F66"/>
+                  <circle cx="72.5" cy="70" r="3.4" fill="#4A3F66"/>
+                  <path d="M41 78 L28 76 M40.5 81 L27 82" stroke="#4A3F66" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+                  <path d="M87 78 L100 76 M87.5 81 L101 82" stroke="#4A3F66" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+                  <path d="M64 74 L60.5 79 L67.5 79 Z" fill="#EFA0B4"/>
+                </svg>
+                <img class="avatar-photo-img" alt="Profile photo" style="display:none;">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Status + Sleep Debt Gauge -->
+        <div class="card" style="text-align:center;">
+          <div id="gauge-status-line" style="font-weight:800; font-size:16px; margin-bottom:6px;">You're doing okay</div>
+          <div class="eyebrow" style="justify-content:center; display:flex;">Sleep debt</div>
+          <div style="position:relative; width:220px; height:120px; margin:6px auto 4px;">
+            <svg width="220" height="120" viewBox="0 0 220 120">
+              <path d="M14 110 A96 96 0 0 1 206 110" stroke="#EDE6FA" stroke-width="16" fill="none" stroke-linecap="round"/>
+              <path id="gauge-arc" d="M14 110 A96 96 0 0 1 206 110" stroke="#3F9E6D" stroke-width="16" fill="none" stroke-linecap="round"
+                    stroke-dasharray="302" stroke-dashoffset="150" style="transition:stroke-dashoffset .6s ease, stroke .3s ease;"/>
+            </svg>
+            <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; padding-bottom:6px;">
+              <div id="gauge-value" style="font-family:'Nunito',sans-serif; font-size:30px; font-weight:800;">-2 hr</div>
+              <div id="gauge-chip" class="chip chip-green">Healthy</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Advice — one short line -->
+        <div class="card" id="ai-advice-card">
+          <div class="row-between">
+            <div class="card-title"><i class="ti ti-sparkles"></i>&#10022; Nox says</div>
+          </div>
+          <p class="subtext" id="ai-advice-text" style="margin:6px 0 10px; font-weight:600; color:var(--text);">Log a few nights to get started.</p>
+          <button class="btn btn-ghost btn-sm" id="ai-advice-action" onclick="goTo('screen-logging'); setNav('screen-logging')">Go to logging</button>
+        </div>
+
+        <!-- Tonight Plan -->
+        <div class="card">
+          <div class="row-between">
+            <div class="card-title">&#127769; Tonight · <span id="tonight-date">Sep 15</span></div>
+            <button class="linklike" onclick="openEditPlan()">Edit</button>
+          </div>
+          <div id="plan-content-rows">
+            <div style="display:flex; justify-content:space-between; margin-top:14px;">
+              <div style="text-align:center; flex:1;">
+                <div class="subtext" style="margin-bottom:4px;">&#127769; Bedtime</div>
+                <div style="font-family:'Nunito',sans-serif; font-size:20px; font-weight:800;" id="plan-bedtime">10:15 PM</div>
+              </div>
+              <div style="text-align:center; flex:1;">
+                <div class="subtext" style="margin-bottom:4px;">&#9728; Wake up</div>
+                <div style="font-family:'Nunito',sans-serif; font-size:20px; font-weight:800; color:var(--fox);" id="plan-wake">6:00 AM</div>
+              </div>
+              <div style="text-align:center; flex:1;">
+                <div class="subtext" style="margin-bottom:4px;">&#128164; Hours</div>
+                <div style="font-family:'Nunito',sans-serif; font-size:20px; font-weight:800;" id="plan-hours">7 hr 30m</div>
+              </div>
+            </div>
+            <div class="row-between" style="margin-top:10px;">
+              <span class="subtext">&#128260; Sleep cycles</span>
+              <span style="font-weight:700; font-size:13px;" id="plan-cycles-label">5 cycles</span>
+            </div>
+            <p class="subtext" id="home-recommendation" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border); font-weight:700; color:var(--lavender);"></p>
+            <button class="btn btn-primary" style="margin-top:14px;" onclick="openEditPlan()">View plan</button>
+          </div>
+          <div id="plan-setup-prompt" style="display:none; margin-top:14px; text-align:center;">
+            <p class="subtext" style="margin-bottom:12px;">Set your wake-up time to create tonight's plan.</p>
+            <button class="btn btn-primary" onclick="openEditPlan()">Set wake-up time</button>
+          </div>
+          <!-- Recovery guidance never requires a Wake Time — shown independently
+               of whether Tonight's schedule (above) is available yet. -->
+          <div id="plan-banking-note" style="display:none; margin-top:14px; padding:12px 14px; border-radius:14px; background:var(--lavender-dim);">
+            <p style="font-size:13px; font-weight:700; color:var(--fox-dark); margin:0;" id="plan-banking-text">&#127769; Tonight, sleep +1 hr 7 min</p>
+            <p class="subtext" style="margin:2px 0 8px;" id="plan-banking-subtext">To prepare for Exam · Sep 16</p>
+            <button class="linklike" onclick="openEditPlan()">View plan</button>
+          </div>
+        </div>
+
+        <!-- Upcoming Event -->
+        <div class="card" id="home-event-card">
+          <div class="card-title">Upcoming event</div>
+          <div id="home-event-content"></div>
+        </div>
+
+        <!-- Recovery Plan -->
+        <div class="card" id="home-recovery-card">
+          <div class="row-between">
+            <div class="card-title">Recovery plan</div>
+            <button class="linklike" id="rp-view-link" style="display:none;" onclick="openRecoveryPlanFromHome()">View Recovery</button>
+          </div>
+          <p class="subtext" style="margin:6px 0 12px;" id="recovery-subtext">No active recovery plan right now.</p>
+          <div id="recovery-days"></div>
+          <div class="card" id="home-rp-warning" style="display:none; margin-top:10px; border-color:var(--yellow); background:var(--yellow-bg);">
+            <p style="font-size:12px; color:var(--yellow); line-height:1.6;">⚠️ Capped at 2 extra hours per night to avoid disrupting your sleep schedule.</p>
+          </div>
+        </div>
+      </div>
+      <div class="bottomnav" id="bottomnav-0"></div>
+    </section>
+
+    <!-- ============ LOGGING ============ -->
+    <section class="screen" id="screen-logging">
+      <div class="scroll" style="padding-top:18px;">
+        <div class="fox-wrap" style="justify-content:flex-start; margin-bottom:8px;">
+          <svg width="60" height="46" viewBox="0 0 100 70" aria-hidden="true">
+            <ellipse cx="28" cy="46" rx="24" ry="13" fill="#F5EDFA"/>
+            <ellipse cx="48" cy="39" rx="19" ry="15" fill="#F5EDFA"/>
+            <path d="M78 12 a8 8 0 1 0 0 16 a10 10 0 1 1 0-16z" fill="#EFE1F8"/>
+            <circle cx="14" cy="14" r="1.6" fill="#D2B8E8" opacity=".7"/>
+            <circle cx="22" cy="8" r="1.1" fill="#D2B8E8" opacity=".6"/>
+            <path d="M34 41 L28 33 L42 37 Z" fill="#D2B8E8"/>
+            <path d="M52 41 L58 33 L44 37 Z" fill="#D2B8E8"/>
+            <ellipse cx="43" cy="47" rx="13" ry="11" fill="#D2B8E8"/>
+            <path d="M36 45 Q40 42 44 45" stroke="#4A3F66" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+            <path d="M42 45 Q46 42 50 45" stroke="#4A3F66" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+            <path d="M33 49 L26 47.5 M33 52 L26 53" stroke="#4A3F66" stroke-width="0.9" fill="none" stroke-linecap="round"/>
+            <path d="M53 49 L60 47.5 M53 52 L60 53" stroke="#4A3F66" stroke-width="0.9" fill="none" stroke-linecap="round"/>
+            <path d="M43 47.5 L40.5 51 L45.5 51 Z" fill="#EFA0B4"/>
+          </svg>
+        </div>
+        <div class="topbar" style="padding-top:0;"><h2 id="logging-title">How did you sleep?</h2></div>
+        <p class="subtext" style="margin-bottom:20px;" id="logging-subtext">Track last night's sleep.</p>
+
+        <div class="field">
+          <label>Date</label>
+          <div class="input-wrap"><input type="date" id="log-date"></div>
+          <p class="hint">Today or earlier only.</p>
+        </div>
+        <div class="field">
+          <label>เวลานอน (sleep time)</label>
+          <div class="input-wrap"><input type="time" id="log-sleep" value="22:30"></div>
+        </div>
+        <div class="field">
+          <label>เวลาตื่น (wake-up time)</label>
+          <div class="input-wrap"><input type="time" id="log-wake" value="06:30"></div>
+        </div>
+
+        <div class="card" style="text-align:center; margin-top:6px;">
+          <div class="subtext">Actual sleep</div>
+          <div style="font-family:'Nunito',sans-serif; font-size:26px; margin-top:4px;" id="log-actual">8 hr</div>
+        </div>
+
+        <button class="btn btn-primary" style="margin-top:18px;" id="log-save-btn" onclick="saveLog()">Save Sleep</button>
+        <button class="btn btn-ghost" style="margin-top:10px; display:none;" id="log-cancel-btn" onclick="cancelEditLog()">Cancel edit</button>
+
+        <div class="section-title">Sleep history</div>
+        <div id="log-history"></div>
+      </div>
+      <div class="bottomnav" id="bottomnav-1"></div>
+    </section>
+
+    <!-- ============ STAT ============ -->
+    <section class="screen" id="screen-stat">
+      <div class="scroll" style="padding-top:18px; position:relative;">
+        <svg style="position:absolute; top:4px; right:60px; pointer-events:none;" width="44" height="28" viewBox="0 0 44 28" aria-hidden="true">
+          <circle cx="6" cy="5" r="1.4" fill="#D2B8E8" opacity=".6"/>
+          <circle cx="14" cy="16" r="1" fill="#D2B8E8" opacity=".45"/>
+          <path d="M32 3 a8 8 0 1 0 0 16 a10 10 0 1 1 0-16z" fill="#EFE1F8"/>
+        </svg>
+        <div class="topbar" style="align-items:flex-start;">
+          <div>
+            <h2>Your Sleep &#127769;</h2>
+            <p class="subtext" style="margin-top:2px;">A little look at how you've been sleeping.</p>
+          </div>
+          <svg width="42" height="42" viewBox="0 0 128 128" fill="none" style="flex-shrink:0; margin-top:2px;">
+            <path d="M42 54 L30 22 L60 40 Z" fill="#D2B8E8"/><path d="M86 54 L98 22 L68 40 Z" fill="#D2B8E8"/>
+            <ellipse cx="64" cy="74" rx="32" ry="29" fill="#D2B8E8"/>
+            <path d="M51 70 Q55.5 65.5 60 70" stroke="#4A3F66" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+            <path d="M68 70 Q72.5 65.5 77 70" stroke="#4A3F66" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+            <path d="M64 74 L60.5 79 L67.5 79 Z" fill="#EFA0B4"/>
+          </svg>
+        </div>
+
+        <div class="period-toggle">
+          <button class="period-btn selected" id="period-btn-7" onclick="setStatPeriod(7)">7 Days</button>
+          <button class="period-btn" id="period-btn-30" onclick="setStatPeriod(30)">30 Days</button>
+        </div>
+
+        <div class="stat-summary-row">
+          <div class="stat-summary-card">
+            <div style="font-size:20px; margin-bottom:2px;">&#127769;</div>
+            <div class="stat-summary-label">Average Sleep</div>
+            <div class="stat-summary-value" id="stat-avg-value">–</div>
+          </div>
+          <div class="stat-summary-card">
+            <div style="font-size:20px; margin-bottom:2px;">&#128164;</div>
+            <div class="stat-summary-label">Sleep Debt</div>
+            <div class="stat-summary-value" id="stat-debt-value">–</div>
+          </div>
+        </div>
+
+        <div class="card" style="position:relative;">
+          <div class="row-between">
+            <div class="card-title">&#10022; Sleep by day</div>
+            <span class="subtext" id="sleep-goal-legend" style="font-size:11px;">┄ Sleep goal &#10022;</span>
+          </div>
+          <div style="height:170px; margin-top:6px; position:relative;">
+            <canvas id="chart-week"></canvas>
+            <div class="empty-state" id="chart-week-error" style="display:none; padding:0; position:absolute; inset:0; align-items:center; justify-content:center;"><p>Not enough data yet.</p></div>
+          </div>
+          <div id="day-detail-text" class="chart-tooltip-card" style="display:none;"></div>
+        </div>
+
+        <div class="card">
+          <div class="row-between">
+            <div class="card-title">&#127769; Sleep Debt</div>
+            <span class="chip chip-green" id="debt-trend-chip">Stable</span>
+          </div>
+          <div style="height:120px; margin-top:10px; position:relative;">
+            <canvas id="chart-debt"></canvas>
+            <div class="empty-state" id="chart-debt-error" style="display:none; padding:0; position:absolute; inset:0; align-items:center; justify-content:center;"><p>Not enough data yet.</p></div>
+          </div>
+          <div id="debt-detail-text" class="chart-tooltip-card" style="display:none;"></div>
+        </div>
+
+        <div class="card" id="stat-insight-card">
+          <div class="row-between">
+            <div class="card-title">&#127769; Sleep insight</div>
+            <svg width="30" height="30" viewBox="0 0 128 128" fill="none" style="flex-shrink:0;">
+              <path d="M42 53 L32 24 L59 39 Z" fill="#D2B8E8"/><path d="M86 53 L96 24 L69 39 Z" fill="#D2B8E8"/>
+              <ellipse cx="64" cy="74" rx="32" ry="29" fill="#D2B8E8"/>
+              <circle cx="55.5" cy="70" r="3.4" fill="#4A3F66"/><circle cx="72.5" cy="70" r="3.4" fill="#4A3F66"/>
+              <path d="M64 74 L60.5 79 L67.5 79 Z" fill="#EFA0B4"/>
+            </svg>
+          </div>
+          <p class="subtext" id="stat-insight-text" style="font-weight:700; color:var(--text); margin-top:8px;"></p>
+        </div>
+      </div>
+      <div class="bottomnav" id="bottomnav-2"></div>
+    </section>
+
+    <!-- ============ EVENT ============ -->
+    <section class="screen" id="screen-event">
+      <div class="scroll" style="padding-top:18px; position:relative;">
+        <svg style="position:absolute; top:2px; right:54px; pointer-events:none;" width="40" height="26" viewBox="0 0 40 26" aria-hidden="true">
+          <circle cx="4" cy="4" r="1.3" fill="#D2B8E8" opacity=".6"/>
+          <path d="M28 2 a7 7 0 1 0 0 14 a9 9 0 1 1 0-14z" fill="#EFE1F8"/>
+        </svg>
+        <div class="topbar">
+          <h2>&#128197; Your events</h2>
+          <button class="icon-btn" onclick="openAddEvent()">+</button>
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:16px;">
+          <button class="pill selected" id="tab-upcoming" onclick="switchEventTab('upcoming')">Upcoming</button>
+          <button class="pill" id="tab-history" onclick="switchEventTab('history')">History</button>
+        </div>
+        <div id="event-list"></div>
+      </div>
+      <div class="bottomnav" id="bottomnav-3"></div>
+    </section>
+
+    <!-- ============ ADD / EDIT EVENT ============ -->
+    <section class="screen" id="screen-addevent">
+      <div class="scroll" style="padding-top:26px;">
+        <button class="icon-btn" onclick="goTo('screen-event'); setNav('screen-event')" style="margin-bottom:22px;">&#8592;</button>
+        <h1 style="font-size:24px; margin-bottom:20px;" id="addevent-title">Add event</h1>
+
+        <div class="field">
+          <label>Event name</label>
+          <div class="input-wrap"><input type="text" id="ev-name" placeholder="เช่น Concert, Exam, Trip"></div>
+        </div>
+        <div class="field">
+          <label>Date</label>
+          <div class="input-wrap"><input type="date" id="ev-date"></div>
+        </div>
+        <div class="field">
+          <label>Time</label>
+          <div class="input-wrap"><input type="time" id="ev-time" value="09:00"></div>
+        </div>
+        <div class="field">
+          <label>Expected sleep</label>
+          <div class="input-wrap select-wrap">
+            <select id="ev-sleep">
+              <option value="4">4 hrs</option>
+              <option value="5" selected>5 hrs</option>
+              <option value="6">6 hrs</option>
+              <option value="7">7 hrs</option>
+              <option value="8">8 hrs</option>
+              <option value="9">9 hrs</option>
+              <option value="10">10 hrs</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Banking days</label>
+          <div class="input-wrap select-wrap">
+            <select id="ev-bankingdays">
+              <option value="3">3 days</option>
+              <option value="4" selected>4 days</option>
+              <option value="5">5 days</option>
+              <option value="6">6 days</option>
+              <option value="7">7 days</option>
+            </select>
+          </div>
+          <p class="hint">Nights to spread extra sleep across.</p>
+        </div>
+        <div class="field">
+          <label>Note (optional)</label>
+          <div class="input-wrap" style="height:auto; padding:12px 14px;">
+            <textarea id="ev-note" placeholder="เพิ่มรายละเอียด" style="background:transparent; border:none; outline:none; color:var(--text); width:100%; resize:none; height:60px; font-family:inherit; font-size:15px;"></textarea>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="ev-save-btn" onclick="submitNewEvent()">Create plan</button>
+        <button class="btn btn-ghost" id="ev-delete-btn" style="margin-top:14px; border-color:var(--red); color:var(--red); display:none;" onclick="requestDeleteEvent()">Delete event</button>
+      </div>
+    </section>
+
+    <!-- ============ RECOVERY PLAN ============ -->
+    <section class="screen" id="screen-recoveryplan" style="position:relative;">
+      <div class="scroll" style="padding-top:26px;">
+        <div class="fox-wrap" style="margin-bottom:16px;">
+          <svg width="72" height="72" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M42 53 L32 24 L59 39 Z" fill="#D2B8E8"/>
+            <path d="M86 53 L96 24 L69 39 Z" fill="#D2B8E8"/>
+            <ellipse cx="64" cy="74" rx="32" ry="29" fill="#D2B8E8"/>
+            <circle cx="55.5" cy="70" r="3.4" fill="#4A3F66"/>
+            <circle cx="72.5" cy="70" r="3.4" fill="#4A3F66"/>
+            <path d="M41 78 L28 76 M40.5 81 L27 82" stroke="#4A3F66" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+            <path d="M87 78 L100 76 M87.5 81 L101 82" stroke="#4A3F66" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+            <path d="M64 74 L60.5 79 L67.5 79 Z" fill="#EFA0B4"/>
+          </svg>
+        </div>
+        <h1 style="text-align:center; font-size:22px; margin-bottom:16px;">Recovery plan</h1>
+
+        <div class="card" style="text-align:center;">
+          <div class="subtext">Prepare for</div>
+          <div style="font-weight:800; font-size:18px; margin-top:2px;" id="rp-event-name">Exam</div>
+          <div class="subtext" id="rp-event-date">Sep 16</div>
+          <div class="divider"></div>
+          <div style="display:flex; justify-content:space-around;">
+            <div>
+              <div class="subtext">Sleep extra</div>
+              <div style="font-weight:800; font-size:19px; color:var(--lavender); margin-top:2px;" id="rp-nightly-amount">+1h / night</div>
+            </div>
+            <div>
+              <div class="subtext">For</div>
+              <div style="font-weight:800; font-size:19px; margin-top:2px;" id="rp-night-count">3 nights</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">Banking schedule</div>
+        <div id="rp-timeline"></div>
+        <div class="card" id="rp-warning" style="display:none; border-color:var(--yellow); background:var(--yellow-bg);">
+          <p style="font-size:13px; color:var(--yellow); line-height:1.6;">⚠️ Nox does not recommend banking more than 2 additional hours of sleep per night. Sleeping too much extra at once may disrupt your sleep schedule and reduce sleep efficiency.</p>
+        </div>
+
+        <button class="btn btn-primary" style="margin-top:20px;" onclick="viewDashboardFromRecovery()">View dashboard</button>
+      </div>
+    </section>
+
+    <!-- ============ ME ============ -->
+    <section class="screen" id="screen-me">
+      <div class="scroll" style="padding-top:18px;">
+        <div class="topbar"><h2>Me</h2></div>
+        <div class="card" style="display:flex; align-items:center; gap:14px;">
+          <div class="avatar-wrap" onclick="triggerAvatarUpload()">
+            <div class="avatar-circle">
+              <svg class="avatar-default-fox" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M42 53 L32 24 L59 39 Z" fill="#D2B8E8"/>
+                <path d="M86 53 L96 24 L69 39 Z" fill="#D2B8E8"/>
+                <ellipse cx="64" cy="74" rx="32" ry="29" fill="#D2B8E8"/>
+                <circle cx="55.5" cy="70" r="3.4" fill="#4A3F66"/>
+                <circle cx="72.5" cy="70" r="3.4" fill="#4A3F66"/>
+                <path d="M41 78 L28 76 M40.5 81 L27 82" stroke="#4A3F66" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+                <path d="M87 78 L100 76 M87.5 81 L101 82" stroke="#4A3F66" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+                <path d="M64 74 L60.5 79 L67.5 79 Z" fill="#EFA0B4"/>
+              </svg>
+              <img class="avatar-photo-img" alt="Profile photo" style="display:none;">
+            </div>
+            <div class="avatar-edit-badge">&#9998;</div>
+          </div>
+          <div>
+            <div style="font-weight:600; font-size:16px;" id="me-name">Nox User</div>
+            <div class="chip chip-yellow" style="margin-top:4px; display:inline-block;">Premium member</div>
+            <div class="linklike" style="margin-top:6px; font-size:12px;" onclick="triggerAvatarUpload()">Change profile photo</div>
+          </div>
+        </div>
+
+        <div class="card" style="padding:6px 0;">
+          <div class="row-between" style="padding:14px 20px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="openProfileModal()"><span>Profile</span><span style="color:var(--text-mute);">&#8250;</span></div>
+          <div class="row-between" style="padding:14px 20px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="openGoalModal()"><span>My goal</span><span style="color:var(--text-mute);">&#8250;</span></div>
+          <div class="row-between" style="padding:14px 20px; cursor:pointer;" onclick="openReminderModal()"><span>Reminder</span><span style="color:var(--text-mute);">&#8250;</span></div>
+        </div>
+
+        <div class="section-title">Personal</div>
+        <div class="card" style="padding:6px 0;">
+          <div class="row-between" style="padding:12px 20px; border-bottom:1px solid var(--border);"><span class="subtext">Name</span><span style="font-weight:700;" id="me-personal-name">–</span></div>
+          <div class="row-between" style="padding:12px 20px; border-bottom:1px solid var(--border);"><span class="subtext">Age</span><span style="font-weight:700;" id="me-personal-age">–</span></div>
+          <div class="row-between" style="padding:12px 20px;"><span class="subtext">Gender</span><span style="font-weight:700;" id="me-personal-gender">–</span></div>
+        </div>
+
+        <div class="section-title">Sleep</div>
+        <div class="card" style="padding:6px 0;">
+          <div class="row-between" style="padding:12px 20px; border-bottom:1px solid var(--border);"><span class="subtext">Target wake-up</span><span style="font-weight:700;" id="me-sleep-wake">–</span></div>
+          <div class="row-between" style="padding:12px 20px;"><span class="subtext">Personalized sleep need</span><span style="font-weight:700;" id="me-sleep-target">–</span></div>
+        </div>
+
+        <button class="btn btn-secondary" style="margin-top:6px;" onclick="doLogout()">Log out</button>
+        <button class="btn btn-ghost" style="margin-top:10px; border-color:var(--red); color:var(--red);" onclick="resetData()">Clear all data</button>
+      </div>
+      <div class="bottomnav" id="bottomnav-4"></div>
+    </section>
+
+  </div>
+
+  <input type="file" id="avatar-file-input" accept="image/*" style="display:none;" onchange="handleAvatarUpload(event)">
+
+  <!-- Full Terms modal -->
+  <div class="modal-overlay" id="modal-terms-full">
+    <div class="modal-sheet" style="max-height:80vh; overflow-y:auto;">
+      <div class="modal-handle"></div>
+      <h2 style="font-size:18px; margin-bottom:12px;">Terms &amp; Conditions</h2>
+      <p class="subtext" style="margin-bottom:10px;">Nox is a sleep tracking and sleep planning application designed to help you understand your sleep debt and plan your rest around your real schedule.</p>
+      <p class="subtext" style="margin-bottom:10px;">All calculations, plans, and recommendations Nox provides are estimates intended purely to help you understand and plan your sleep. Nox is not a medical device, and nothing in the app is a medical diagnosis, treatment, or professional medical advice. If you have concerns about your health or sleep, please consult a qualified healthcare professional.</p>
+      <p class="subtext" style="margin-bottom:10px;">The accuracy of Nox's results depends entirely on the information you provide — including your profile details and the sleep you log. Providing accurate, up-to-date information will produce more appropriate results. You're free to update or correct any of your information at any time from the Me tab.</p>
+      <p class="subtext" style="margin-bottom:10px;">By using Nox, you agree to use the app for personal, non-commercial sleep-planning purposes, and you understand that Nox does not guarantee any particular health outcome.</p>
+      <button class="btn btn-ghost" style="margin-top:10px;" onclick="closeModal('modal-terms-full')">Close</button>
+    </div>
+  </div>
+
+  <!-- Full Privacy Policy modal -->
+  <div class="modal-overlay" id="modal-privacy-full">
+    <div class="modal-sheet" style="max-height:80vh; overflow-y:auto;">
+      <div class="modal-handle"></div>
+      <h2 style="font-size:18px; margin-bottom:12px;">Privacy Policy</h2>
+      <p class="subtext" style="margin-bottom:10px;">This policy explains what information Nox collects, why, and the rights you have over it.</p>
+      <p class="subtext" style="margin-bottom:4px; font-weight:600; color:var(--text);">What we collect</p>
+      <p class="subtext" style="margin-bottom:10px;">Account details (username, password), personal information (name, birth date, gender, exercise frequency), sleep preferences (target wake-up time, usual bedtime), sleep records you log, event information, and an optional profile photo.</p>
+      <p class="subtext" style="margin-bottom:4px; font-weight:600; color:var(--text);">Why we use it</p>
+      <p class="subtext" style="margin-bottom:10px;">To create and manage your account, build your personalized sleep profile, calculate sleep debt and statistics, generate your tonight plan and recovery plan, and provide personalized AI advice. We only use your information for purposes described in this policy.</p>
+      <p class="subtext" style="margin-bottom:4px; font-weight:600; color:var(--text);">Where it's stored</p>
+      <p class="subtext" style="margin-bottom:10px;">In this version of Nox, your data is stored locally in your browser on this device. We take reasonable steps to help protect it, though no storage method can be guaranteed 100% secure.</p>
+      <p class="subtext" style="margin-bottom:4px; font-weight:600; color:var(--text);">Your rights</p>
+      <p class="subtext" style="margin-bottom:10px;">You may access, correct, or delete your information at any time — the Me tab lets you edit your profile, and "Clear all data" removes everything Nox has stored for you on this device. You can also ask questions at any time about how your information is used.</p>
+      <button class="btn btn-ghost" style="margin-top:10px;" onclick="closeModal('modal-privacy-full')">Close</button>
+    </div>
+  </div>
+
+  <!-- Delete event confirmation modal -->
+  <div class="modal-overlay" id="modal-delete-event">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <h2 style="font-size:18px; margin-bottom:10px;">Delete this event?</h2>
+      <p class="subtext" style="margin-bottom:20px;">Are you sure you want to delete this event? This action cannot be undone.</p>
+      <button class="btn btn-secondary" onclick="closeModal('modal-delete-event')">Cancel</button>
+      <button class="btn btn-primary" style="margin-top:10px; background:var(--red); color:#FFFFFF;" onclick="confirmDeleteEvent()">Delete event</button>
+    </div>
+  </div>
+
+  <!-- Delete log confirmation modal -->
+  <div class="modal-overlay" id="modal-delete-log">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <h2 style="font-size:18px; margin-bottom:10px;">Delete this sleep log?</h2>
+      <p class="subtext" style="margin-bottom:20px;">This sleep record will be permanently removed.</p>
+      <button class="btn btn-secondary" onclick="closeModal('modal-delete-log')">Cancel</button>
+      <button class="btn btn-primary" style="margin-top:10px; background:var(--red); color:#FFFFFF;" onclick="confirmDeleteLog()">Delete</button>
+    </div>
+  </div>
+
+  <!-- Edit plan modal -->
+  <div class="modal-overlay" id="modal-editplan">
+    <div class="modal-sheet" style="max-height:85vh; overflow-y:auto;">
+      <div class="modal-handle"></div>
+      <h2 style="font-size:18px; margin-bottom:6px;">Edit tonight's plan</h2>
+      <p class="subtext" style="margin-bottom:16px;">Choose your sleep cycles (90 mins each) so you wake up feeling refreshed! 🌙</p>
+      <div class="field">
+        <label>Wake-up time</label>
+        <div class="input-wrap"><input type="time" id="edit-wake"></div>
+      </div>
+
+      <p class="section-title" style="margin-top:18px;">How long would you like to sleep?</p>
+      <div id="cycle-options"></div>
+
+      <div class="card" style="text-align:center; margin-top:16px;">
+        <div class="subtext">Bedtime preview</div>
+        <div style="font-family:'Nunito',sans-serif; font-size:24px; margin-top:4px;" id="edit-bedtime-preview">10:15 PM</div>
+      </div>
+
+      <button class="btn btn-primary" style="margin-top:16px;" onclick="applyEditPlan()">Save plan</button>
+      <button class="btn btn-ghost" style="margin-top:10px;" onclick="closeModal('modal-editplan')">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Profile modal -->
+  <div class="modal-overlay" id="modal-profile">
+    <div class="modal-sheet" style="max-height:80vh; overflow-y:auto;">
+      <div class="modal-handle"></div>
+      <h2 style="font-size:18px; margin-bottom:14px;">Edit profile</h2>
+      <div class="avatar-wrap" style="margin:0 auto 18px; width:74px; height:74px;" onclick="triggerAvatarUpload()">
+        <div class="avatar-circle" style="width:74px; height:74px;">
+          <svg class="avatar-default-fox" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M42 53 L32 24 L59 39 Z" fill="#D2B8E8"/>
+            <path d="M86 53 L96 24 L69 39 Z" fill="#D2B8E8"/>
+            <ellipse cx="64" cy="74" rx="32" ry="29" fill="#D2B8E8"/>
+            <circle cx="55.5" cy="70" r="3.4" fill="#4A3F66"/>
+            <circle cx="72.5" cy="70" r="3.4" fill="#4A3F66"/>
+            <path d="M41 78 L28 76 M40.5 81 L27 82" stroke="#4A3F66" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+            <path d="M87 78 L100 76 M87.5 81 L101 82" stroke="#4A3F66" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+            <path d="M64 74 L60.5 79 L67.5 79 Z" fill="#EFA0B4"/>
+          </svg>
+          <img class="avatar-photo-img" alt="Profile photo" style="display:none;">
+        </div>
+        <div class="avatar-edit-badge">&#9998;</div>
+      </div>
+      <div class="field">
+        <label>Name</label>
+        <div class="input-wrap"><input type="text" id="pf-name"></div>
+      </div>
+      <div class="field">
+        <label>Date of birth</label>
+        <div class="input-wrap"><input type="date" id="pf-dob"></div>
+      </div>
+      <div class="field">
+        <label>Gender</label>
+        <div class="pill-group" id="pf-gender">
+          <div class="pill" data-val="Male" onclick="selectPill('pf-gender', this)">Male</div>
+          <div class="pill" data-val="Female" onclick="selectPill('pf-gender', this)">Female</div>
+          <div class="pill" data-val="Other" onclick="selectPill('pf-gender', this)">Other</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Exercise frequency</label>
+        <div class="input-wrap select-wrap">
+          <select id="pf-exercise">
+            <option value="rarely">Rarely</option>
+            <option value="1-2">1–2 days/week</option>
+            <option value="3-4">3–4 days/week</option>
+            <option value="5-6">5–6 days/week</option>
+            <option value="daily">Every day</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Target wake-up time</label>
+        <div class="input-wrap"><input type="time" id="pf-wake"></div>
+      </div>
+      <button class="btn btn-primary" onclick="saveProfileEdit()">Save changes</button>
+      <button class="btn btn-ghost" style="margin-top:10px;" onclick="closeModal('modal-profile')">Cancel</button>
+    </div>
+  </div>
+
+  <!-- My Goal modal -->
+  <div class="modal-overlay" id="modal-goal">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <h2 style="font-size:18px; margin-bottom:6px;">My sleep goal</h2>
+      <p class="subtext" style="margin-bottom:16px;">Based on your profile, here's what Nox recommends.</p>
+      <div class="card" style="text-align:center; margin-bottom:14px;">
+        <div class="subtext">Your recommended sleep</div>
+        <div style="font-family:'Nunito',sans-serif; font-size:28px; margin-top:6px;" id="goal-tbase">8 hr</div>
+        <p class="subtext" style="margin-top:6px;">This is your personalized sleep target.</p>
+      </div>
+      <div class="row-between" style="padding:4px 4px 10px;">
+        <span class="subtext">Target wake-up time</span>
+        <span style="font-weight:600;" id="goal-wake">7:00 AM</span>
+      </div>
+      <div class="row-between" style="padding:4px;">
+        <span class="subtext">Nights logged</span>
+        <span style="font-weight:600;" id="goal-nights">0</span>
+      </div>
+      <button class="btn btn-primary" style="margin-top:16px;" onclick="closeModal('modal-goal'); openProfileModal();">Adjust profile</button>
+      <button class="btn btn-ghost" style="margin-top:10px;" onclick="closeModal('modal-goal')">Close</button>
+    </div>
+  </div>
+
+  <!-- Reminder modal -->
+  <div class="modal-overlay" id="modal-reminder">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <h2 style="font-size:18px; margin-bottom:6px;">Reminders</h2>
+      <p class="subtext" style="margin-bottom:16px;">Nox can nudge you around your sleep plan.</p>
+
+      <div class="card" style="padding:14px 16px;">
+        <div class="row-between">
+          <div>
+            <div style="font-weight:600; font-size:14px;">Bedtime reminder</div>
+            <div class="subtext" id="reminder-bed-sub">15 min before bedtime</div>
+          </div>
+          <button class="toggle" id="toggle-bedtime" onclick="toggleReminder('bedtime')"><span class="toggle-knob"></span></button>
+        </div>
+      </div>
+      <div class="card" style="padding:14px 16px;">
+        <div class="row-between">
+          <div>
+            <div style="font-weight:600; font-size:14px;">Wake-up reminder</div>
+            <div class="subtext">At your target wake-up time</div>
+          </div>
+          <button class="toggle" id="toggle-wake" onclick="toggleReminder('wake')"><span class="toggle-knob"></span></button>
+        </div>
+      </div>
+      <div class="card" style="padding:14px 16px;">
+        <div class="row-between">
+          <div>
+            <div style="font-weight:600; font-size:14px;">Logging reminder</div>
+            <div class="subtext">Daily nudge to log last night's sleep</div>
+          </div>
+          <button class="toggle" id="toggle-logging" onclick="toggleReminder('logging')"><span class="toggle-knob"></span></button>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:10px;">Nox is a prototype — reminders are saved to your plan but won't send real phone notifications yet.</p>
+      <button class="btn btn-ghost" style="margin-top:14px;" onclick="closeModal('modal-reminder')">Done</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+/* ============================================================
+   Supabase — used ONLY to sync a new signup's profile row to the
+   class assignment's "users" table (from schema.sql). Everything
+   else in the app still runs on localStorage exactly as before;
+   this is an additive, non-blocking sync, not a replacement.
+   ============================================================ */
+const SUPABASE_URL = 'https://qsigiyfubdhecaetktis.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_fpSa5MxjZMMqI_TYYoBEAg_l4Sqs9Uv';
+const supabaseClient = (typeof supabase !== 'undefined')
+  ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+/* ============================================================
+   NOX — app state, persisted in this browser via localStorage
+   ============================================================ */
+const STORAGE_KEY = 'nox:userdata';
+const state = {
+  profile: null, // { username, password, name, dob, gender, exercise, targetWake }
+  logs: [],   // {date, sleepTime, wakeTime, durationMin}
+  events: []  // {name, date, time, expectedHrs, note, status}
+};
+const NAV_ICONS = {
+  bed: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M3 18.2 V8.6 a1.6 1.6 0 0 1 1.6-1.6 h3.8 a1.6 1.6 0 0 1 1.6 1.6 V12.4" class="nav-stroke" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M10 12.4 h9.5 a1 1 0 0 1 1 1 v4.8" class="nav-stroke" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="4.6" y="9.2" width="4" height="3" rx="1" class="nav-fill"/>
+    <path d="M2.5 18.2 h19" class="nav-stroke" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M17.6 3.4 a2.3 2.3 0 1 0 0 4.6 a2.9 2.9 0 1 1 0-4.6z" class="nav-fill" opacity=".85"/>
+  </svg>`,
+  stats: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="4" y="13" width="3.4" height="7" rx="1.3" class="nav-fill"/>
+    <rect x="10.3" y="9" width="3.4" height="11" rx="1.3" class="nav-fill"/>
+    <rect x="16.6" y="5" width="3.4" height="15" rx="1.3" class="nav-fill"/>
+  </svg>`,
+  cat: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M6.4 8.6 L3.2 2.8 L9.6 6.4 Z" class="nav-fill"/>
+    <path d="M17.6 8.6 L20.8 2.8 L14.4 6.4 Z" class="nav-fill"/>
+    <circle cx="12" cy="13.2" r="8.6" class="nav-fill"/>
+    <path d="M12 15.3 L10.4 17.5 L13.6 17.5 Z" class="nav-muzzle"/>
+    <circle cx="9.6" cy="12.6" r="1" class="nav-eye"/>
+    <circle cx="14.4" cy="12.6" r="1" class="nav-eye"/>
+    <path d="M6.6 14.6 L2.6 13.9 M6.6 16.1 L2.4 16.4 M17.4 14.6 L21.4 13.9 M17.4 16.1 L21.6 16.4" class="nav-stroke" stroke-width="0.9" stroke-linecap="round" fill="none"/>
+  </svg>`,
+  event: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="4" y="5.5" width="16" height="14" rx="2.4" class="nav-stroke" stroke-width="1.9" fill="none"/>
+    <line x1="4" y1="9.6" x2="20" y2="9.6" class="nav-stroke" stroke-width="1.7"/>
+    <line x1="8" y1="3.4" x2="8" y2="7" class="nav-stroke" stroke-width="1.7" stroke-linecap="round"/>
+    <line x1="16" y1="3.4" x2="16" y2="7" class="nav-stroke" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M14.6 12.2 a2.6 2.6 0 1 0 0 5.2 a3.2 3.2 0 1 1 0-5.2z" class="nav-fill"/>
+  </svg>`,
+  me: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="9.6" r="3.9" class="nav-fill"/>
+    <path d="M5.2 20c0-3.9 3.06-6.9 6.8-6.9s6.8 3 6.8 6.9" class="nav-stroke" stroke-width="1.9" stroke-linecap="round" fill="none"/>
+  </svg>`
+};
+const NAV_ITEMS = [
+  {id:'screen-logging', icon:NAV_ICONS.bed,   label:'Logging'},
+  {id:'screen-stat',    icon:NAV_ICONS.stats, label:'Stats'},
+  {id:'screen-home',    icon:NAV_ICONS.cat,   label:'Home', center:true},
+  {id:'screen-event',   icon:NAV_ICONS.event, label:'Event'},
+  {id:'screen-me',      icon:NAV_ICONS.me,    label:'Me'}
+];
+
+async function persistState(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      profile: state.profile, logs: state.logs, events: state.events
+    }));
+  }catch(err){
+    console.error('Nox: failed to save data', err);
+    showToast("Couldn't save — storage may be full or blocked");
+  }
+}
+async function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const data = JSON.parse(raw);
+      state.profile = data.profile || null;
+      state.logs = data.logs || [];
+      state.events = data.events || [];
+      // Backfill ids for events saved before Edit/Delete Event existed
+      let needsSave = false;
+      state.events.forEach(e=>{ if(!e.id){ e.id = genId(); needsSave = true; } });
+      if(needsSave) persistState();
+      return true;
+    }
+    return false;
+  }catch(err){
+    // storage blocked (private browsing etc) or nothing stored yet
+    return false;
+  }
+}
+async function clearAllData(){
+  try{
+    localStorage.removeItem(STORAGE_KEY);
+  }catch(err){ /* ignore */ }
+  state.profile = null; state.logs = []; state.events = [];
+}
+function addDays(n){
+  const d = bangkokNow();
+  d.setUTCDate(d.getUTCDate() + n);
+  const y = d.getUTCFullYear(), m = String(d.getUTCMonth()+1).padStart(2,'0'), day = String(d.getUTCDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+/* ---------------- Username registry (uniqueness, case-insensitive) ---------------- */
+const USERNAME_REGISTRY_KEY = 'nox:registered-usernames';
+function getRegisteredUsernames(){
+  try{
+    const raw = localStorage.getItem(USERNAME_REGISTRY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  }catch(err){ return []; }
+}
+function isUsernameTaken(username){
+  const lower = username.trim().toLowerCase();
+  if(!lower) return false;
+  return getRegisteredUsernames().includes(lower);
+}
+function registerUsername(username){
+  try{
+    const list = getRegisteredUsernames();
+    const lower = username.trim().toLowerCase();
+    if(!list.includes(lower)){
+      list.push(lower);
+      localStorage.setItem(USERNAME_REGISTRY_KEY, JSON.stringify(list));
+    }
+  }catch(err){ /* ignore */ }
+}
+
+/* ---------------- Navigation ---------------- */
+function goTo(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function renderBottomNav(){
+  ['bottomnav-0','bottomnav-1','bottomnav-2','bottomnav-3','bottomnav-4'].forEach((navId, idx)=>{
+    const container = document.getElementById(navId);
+    if(!container) return;
+    container.innerHTML = NAV_ITEMS.map(item=>{
+      if(item.center){
+        return `<button class="navitem" data-target="${item.id}" onclick="setNav('${item.id}')"><span class="center-icon">${item.icon}</span><span>${item.label}</span></button>`;
+      }
+      return `<button class="navitem" data-target="${item.id}" onclick="setNav('${item.id}')"><span class="icon-slot">${item.icon}</span><span>${item.label}</span></button>`;
+    }).join('');
+  });
+}
+function setNav(targetId){
+  goTo(targetId);
+  document.querySelectorAll('.navitem').forEach(btn=>{
+    btn.classList.toggle('active', btn.dataset.target === targetId);
+  });
+  if(targetId==='screen-home') renderHome();
+  if(targetId==='screen-logging') renderLogging();
+  if(targetId==='screen-stat') renderStats();
+  if(targetId==='screen-event') renderEvents();
+  if(targetId==='screen-me') renderMe();
+}
+
+/* ---------------- Small UI helpers ---------------- */
+function togglePw(id, btn){
+  const input = document.getElementById(id);
+  const hidden = input.type === 'password';
+  input.type = hidden ? 'text' : 'password';
+  btn.textContent = hidden ? 'Hide' : 'Show';
+}
+function selectPill(groupId, el){
+  document.querySelectorAll('#'+groupId+' .pill').forEach(p=>p.classList.remove('selected'));
+  el.classList.add('selected');
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.innerHTML = `<span>${msg}</span>`;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200);
+}
+function showFoxToast(msg){
+  const t = document.getElementById('toast');
+  t.innerHTML = `<span style="display:flex; align-items:center; justify-content:center; gap:8px;">
+    <svg width="22" height="22" viewBox="0 0 128 128" style="flex-shrink:0;">
+      <path d="M42 53 L32 24 L59 39 Z" fill="#D2B8E8"/>
+      <path d="M86 53 L96 24 L69 39 Z" fill="#D2B8E8"/>
+      <ellipse cx="64" cy="74" rx="32" ry="29" fill="#D2B8E8"/>
+      <path d="M51 70 Q55.5 65.5 60 70" stroke="#4A3F66" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+      <path d="M68 70 Q72.5 65.5 77 70" stroke="#4A3F66" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+      <path d="M41 78 L28 76 M40.5 81 L27 82" stroke="#4A3F66" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+      <path d="M87 78 L100 76 M87.5 81 L101 82" stroke="#4A3F66" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+      <path d="M64 74 L60.5 79 L67.5 79 Z" fill="#EFA0B4"/>
+    </svg>
+    <span>${msg}</span>
+  </span>`;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2400);
+}
+function closeModal(id){ document.getElementById(id).classList.remove('active'); }
+
+/* ---------------- Auth flows ---------------- */
+function doLogin(){
+  const u = document.getElementById('login-username').value.trim();
+  const p = document.getElementById('login-password').value.trim();
+  const err = document.getElementById('login-error');
+  if(!u || !p){ err.textContent = 'Please enter your username and password.'; err.style.display='block'; return; }
+  if(!state.profile){
+    err.textContent = "No Nox account found yet — try Sign up instead.";
+    err.style.display='block';
+    return;
+  }
+  if(state.profile.username.toLowerCase() !== u.toLowerCase() || state.profile.password !== p){
+    err.textContent = 'Username or password is incorrect.';
+    err.style.display='block';
+    return;
+  }
+  err.style.display='none';
+  enterApp();
+}
+function checkPasswordRules(pw){
+  return {
+    len: pw.length >= 8,
+    upper: /[A-Z]/.test(pw),
+    lower: /[a-z]/.test(pw),
+    num: /[0-9]/.test(pw),
+    special: /[^A-Za-z0-9]/.test(pw)
+  };
+}
+function passwordMeetsAllRules(pw){
+  const r = checkPasswordRules(pw);
+  return r.len && r.upper && r.lower && r.num && r.special;
+}
+function updatePasswordChecklist(){
+  const pw = document.getElementById('su-password').value;
+  const rules = checkPasswordRules(pw);
+  document.querySelectorAll('#pw-requirements .pw-req').forEach(el=>{
+    el.classList.toggle('met', !!rules[el.dataset.rule]);
+  });
+}
+function updateUsernameStatus(){
+  const input = document.getElementById('su-username');
+  const status = document.getElementById('su-username-status');
+  const wrap = document.getElementById('su-username-wrap');
+  const val = input.value.trim();
+  if(!val){ status.textContent = ''; status.className = 'hint'; wrap.classList.remove('error'); return; }
+  if(isUsernameTaken(val)){
+    status.textContent = 'This username is already taken.';
+    status.className = 'hint bad';
+    wrap.classList.add('error');
+  }else{
+    status.textContent = 'Username is available ✓';
+    status.className = 'hint ok';
+    wrap.classList.remove('error');
+  }
+}
+function saveProfile(){
+  const username = document.getElementById('su-username').value.trim();
+  const password = document.getElementById('su-password').value.trim();
+  const name = document.getElementById('su-name').value.trim();
+  const dob = document.getElementById('su-dob').value;
+  const genderEl = document.querySelector('#su-gender .pill.selected');
+  const exercise = document.getElementById('su-exercise').value;
+  const targetWake = document.getElementById('su-wake').value;
+  const err = document.getElementById('su-error');
+
+  if(!username || !password || !name || !dob || !genderEl || !targetWake){
+    err.textContent = 'Please fill in all required fields.';
+    err.style.display = 'block';
+    return;
+  }
+  if(isUsernameTaken(username)){
+    err.textContent = 'This username is already taken. Please choose another.';
+    err.style.display = 'block';
+    return;
+  }
+  if(!passwordMeetsAllRules(password)){
+    err.textContent = 'Add at least one number and one special character, with upper and lower case letters, 8+ characters total.';
+    err.style.display = 'block';
+    return;
+  }
+  err.style.display = 'none';
+  state.profile = { username, password, name, dob, gender:genderEl.dataset.val, exercise, targetWake };
+  state.logs = []; state.events = [];
+  registerUsername(username);
+  persistState();
+  // Fire-and-forget: sync this signup to the Supabase "users" table from
+  // schema.sql. This never blocks or breaks the local-first signup flow —
+  // the app already works entirely offline via localStorage; this is purely
+  // an additive sync for the class assignment's database requirement.
+  syncUserToSupabase(state.profile);
+  document.getElementById('gs-name').textContent = `Welcome, ${name.split(' ')[0]}!`;
+  goTo('screen-getstarted');
+}
+async function syncUserToSupabase(profile){
+  if(!supabaseClient){
+    console.warn('Nox: Supabase client not available — SDK failed to load (check internet connection).');
+    showToast('Saved locally — Supabase sync unavailable');
+    return;
+  }
+  try{
+    const { error } = await supabaseClient.from('users').insert({
+      username: profile.username,
+      password: profile.password,
+      name: profile.name,
+      dob: profile.dob,
+      gender: profile.gender,
+      exercise: profile.exercise,
+      target_wake: profile.targetWake
+    });
+    if(error){
+      console.error('Nox: Supabase sync failed —', error.message, error);
+      showToast('Saved locally — Supabase sync failed (see console)');
+    }else{
+      console.log('Nox: user synced to Supabase successfully:', profile.username);
+      showToast('Synced to Supabase ✓');
+    }
+  }catch(err){
+    console.error('Nox: Supabase sync threw an exception —', err);
+    showToast('Saved locally — Supabase sync failed (see console)');
+  }
+}
+function enterApp(){
+  renderBottomNav();
+  setNav('screen-home');
+}
+function doLogout(){
+  goTo('screen-welcome');
+}
+
+/* ---------------- Core sleep-science logic (hidden from UI) ---------------- */
+function getAge(dob){
+  if(!dob) return 25;
+  const [dy, dm, dd] = dob.split('-').map(Number);
+  const [by, bm, bd] = todayStr().split('-').map(Number); // "today" per Thailand time, never device time
+  let age = by - dy;
+  if(bm < dm || (bm === dm && bd < dd)) age--;
+  return age;
+}
+function computeTbaseMin(){
+  const age = getAge(state.profile.dob);
+  let ageAdj = 0;
+  if(age < 18) ageAdj = 0.75; else if(age <= 25) ageAdj = 0.25; else if(age <= 60) ageAdj = 0; else ageAdj = -0.5;
+  const genderAdj = state.profile.gender === 'Female' ? 0.25 : 0;
+  const exMap = {'rarely':-0.15, '1-2':0, '3-4':0.25, '5-6':0.5, 'daily':0.5};
+  const exAdj = exMap[state.profile.exercise] ?? 0;
+  const tbase = 8.0 + ageAdj + genderAdj + exAdj;
+  return Math.round(tbase * 60);
+}
+function timeToMinutes(t){ const [h,m] = t.split(':').map(Number); return h*60+m; }
+function minutesToLabel(mins){
+  const h = Math.floor(mins/60); const m = mins%60;
+  return h + ' hr' + (m ? ' '+m+'m' : '');
+}
+/* ---------------- Thailand time zone (Asia/Bangkok, UTC+7) ----------------
+   The device's own time zone is never trusted. bangkokNow() returns a Date
+   object whose UTC-getter fields (getUTCHours, getUTCDate, etc.) represent
+   the current Bangkok wall-clock time, no matter where the device physically is. */
+function bangkokNow(){
+  return new Date(Date.now() + 7*60*60*1000);
+}
+function todayStr(){
+  const d = bangkokNow();
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth()+1).padStart(2,'0');
+  const day = String(d.getUTCDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function bangkokNowMinutes(){
+  const d = bangkokNow();
+  return d.getUTCHours()*60 + d.getUTCMinutes();
+}
+function bangkokNowDateTimeStr(){
+  const d = bangkokNow();
+  const y = d.getUTCFullYear(), mo = String(d.getUTCMonth()+1).padStart(2,'0'), da = String(d.getUTCDate()).padStart(2,'0');
+  const h = String(d.getUTCHours()).padStart(2,'0'), mi = String(d.getUTCMinutes()).padStart(2,'0');
+  return `${y}-${mo}-${da}T${h}:${mi}`;
+}
+/* Event status is always derived live from its date+time vs. the current
+   Bangkok moment — never a stored flag — so editing a date instantly moves
+   an event between Upcoming and History with no separate "recheck" step. */
+function isEventUpcoming(e){
+  const eventDateTime = `${e.date}T${(e.time || '00:00')}`;
+  return eventDateTime >= bangkokNowDateTimeStr();
+}
+function genId(){
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+/* Format a wall-clock time (given only as minutes-since-midnight, may be
+   negative or >1440 when a plan crosses midnight) as "10:15 PM" — pure
+   arithmetic, no Date/timeZone conversion, so it always reads as Thailand time. */
+function clockLabelFromMinutes(totalMin){
+  let m = ((totalMin % 1440) + 1440) % 1440;
+  let h24 = Math.floor(m/60), mm = m%60;
+  const period = h24 < 12 ? 'AM' : 'PM';
+  let h12 = h24 % 12; if(h12 === 0) h12 = 12;
+  return `${h12}:${String(mm).padStart(2,'0')} ${period}`;
+}
+function clockLabelFromHHMM(hhmm){
+  return clockLabelFromMinutes(timeToMinutes(hhmm));
+}
+function durationFromTimes(sleepTime, wakeTime){
+  let s = timeToMinutes(sleepTime), w = timeToMinutes(wakeTime);
+  if(w <= s) w += 24*60;
+  return w - s;
+}
+function dailyDebtMin(actualMin){
+  return Math.max(0, computeTbaseMin() - actualMin);
+}
+function sortedLogs(){
+  return [...state.logs].sort((a,b)=> a.date.localeCompare(b.date));
+}
+/* Pure calendar-string date shift (dateStr + deltaDays), timezone-safe —
+   same Date.UTC-based approach as daysBetweenDates(), never touches the
+   device's local timezone. Used to walk "today, today-1, ... today-6". */
+function shiftDateStr(dateStr, deltaDays){
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m-1, d + deltaDays));
+  const yy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth()+1).padStart(2,'0');
+  const dd = String(dt.getUTCDate()).padStart(2,'0');
+  return `${yy}-${mm}-${dd}`;
+}
+/* Accumulated Sleep Debt = sum of Daily Sleep Debt over the last 7 CALENDAR
+   DAYS (today and the 6 days before it), not the last 7 logged entries.
+   A calendar day with no log simply contributes 0 — it is not skipped. */
+function accumulatedDebtMin(){
+  const today = todayStr();
+  const byDate = {};
+  state.logs.forEach(l => { byDate[l.date] = l; });
+  let total = 0;
+  for(let i=0;i<7;i++){
+    const d = shiftDateStr(today, -i);
+    const log = byDate[d];
+    if(log) total += dailyDebtMin(log.durationMin);
+  }
+  return Math.min(total, 20*60);
+}
+function gaugeInfo(){
+  const debtMin = accumulatedDebtMin();
+  const hrs = debtMin/60;
+  let level, color, chipClass, note;
+  if(hrs < 3){ level='Healthy'; color='#3F9E6D'; chipClass='chip-green'; note="You're in good shape. Keep your rhythm steady."; }
+  else if(hrs < 8){ level='Mild fatigue'; color='#C98A1D'; chipClass='chip-yellow'; note="You're a little behind on rest. An earlier bedtime tonight would help."; }
+  else { level='High'; color='#D9615C'; chipClass='chip-red'; note="You may be very sleepy. Avoid driving or operating machinery."; }
+  return { debtMin, hrs, level, color, chipClass, note };
+}
+/* Sleep Cycle recommendation = CEILING(targetMin / 90). NO maximum cap —
+   per NOX Final UX + Recovery/Tonight Plan Revision, section 11/12: a target
+   sleep duration that needs 7+ cycles is shown as 7+ cycles, not clamped to 6.
+   Golden examples: 8h00→6, 8h20→6, 9h00→6, 9h17→7, 9h56→7, 10h30→7. */
+function recommendedCycleFor(targetMin){
+  return Math.max(1, Math.ceil(targetMin / 90));
+}
+
+/* Pure calendar-string day difference (dateB − dateA), immune to any device
+   time zone — never goes through a locally-interpreted Date object. */
+function daysBetweenDates(dateStrA, dateStrB){
+  const [ay,am,ad] = dateStrA.split('-').map(Number);
+  const [by,bm,bd] = dateStrB.split('-').map(Number);
+  return Math.round((Date.UTC(by,bm-1,bd) - Date.UTC(ay,am-1,ad)) / 86400000);
+}
+
+/* ---------------- Calculation engine — shared, single-source-of-truth ----------------
+   These four functions are the ONLY place each formula is implemented. Every screen
+   (Home, Tonight Plan, Edit Plan, Recovery Plan) calls these rather than recomputing
+   the math inline, so they can never drift out of sync with each other. */
+
+/* Future Sleep Debt = Tbase − Expected Sleep on the event day. No division.
+   Golden Test 07: Tbase=8h, Expected=5h → 3h (explicitly NOT 3.75h). */
+function computeFutureSleepDebtMin(tbaseMin, expectedSleepMin){
+  return Math.max(0, tbaseMin - expectedSleepMin);
+}
+
+/* Daily Banking Target = FutureDebt ÷ BankingDays, capped at 2 hours/night.
+   Golden Test 08: 3h/3days → 1h/night. Test 09: 12h/3days → raw 4h, capped to 2h. */
+function computeDailyBankingTarget(futureDebtMin, bankingDays){
+  const rawDailyBankingMin = futureDebtMin / bankingDays;
+  const dailyBankingMin = Math.min(rawDailyBankingMin, 120);
+  const capped = rawDailyBankingMin > 120;
+  return { dailyBankingMin, capped, rawDailyBankingMin };
+}
+
+/* Target Sleep Duration = Tbase + Daily Banking + (Accumulated Debt ÷ 7).
+   Golden Test 10 / 14: 8h + 1h + (2h/7) ≈ 9h17m. */
+function computeTargetSleepMin(tbaseMin, dailyBankingMin, accDebtMin){
+  return tbaseMin + dailyBankingMin + (accDebtMin / 7);
+}
+
+/* Bedtime = Wake Time − (90 × Cycles) + 15 minutes.
+   Golden Test 13 / 14: Wake=07:00, Cycles=6 → 22:15.
+   (420 − 540 + 15 = −105 → wraps to 22:15 via clockLabelFromMinutes.) */
+function computeBedtimeMin(wakeMin, cycles){
+  return wakeMin - (cycles * 90) + 15;
+}
+
+/* Finds the nearest upcoming event that needs Sleep Banking (expected sleep on
+   the event day is below the user's personalized baseline) and returns the
+   nightly extra-sleep target for tonight, recalculated fresh from today's date. */
+/* Core Sleep Banking calculation for a single event — shared by the
+   "find the active banking event" scan and the dedicated Recovery Plan screen. */
+function computeBankingForEvent(e){
+  const tbaseMin = computeTbaseMin();
+  const today = todayStr();
+  if(!isEventUpcoming(e) || e.date <= today) return null;
+  const daysUntil = daysBetweenDates(today, e.date);
+  if(daysUntil > 7 || daysUntil < 1) return null;
+  const expectedSleepMin = Number(e.expectedHrs) * 60;
+  const futureDebtMin = computeFutureSleepDebtMin(tbaseMin, expectedSleepMin);
+  if(futureDebtMin <= 0) return null;
+  const requestedDays = Number(e.bankingDays) || 4;
+  const bankingDays = Math.min(Math.max(requestedDays, 3), Math.max(daysUntil, 1));
+  const { dailyBankingMin, capped, rawDailyBankingMin } = computeDailyBankingTarget(futureDebtMin, bankingDays);
+  // Below this, the nightly recommendation is too small to be meaningful or
+  // actionable — treat it as noise rather than activating full Banking Mode.
+  // (Pre-existing UX safeguard, not part of the Master Formula Spec — preserved
+  // unchanged since no Golden Test exercises this edge case.)
+  const MEANINGFUL_THRESHOLD_MIN = 10;
+  if(rawDailyBankingMin < MEANINGFUL_THRESHOLD_MIN) return null;
+  return { event: e, daysUntil, bankingDays, dailyBankingMin, capped };
+}
+function computeSleepBanking(){
+  if(!state.profile) return null;
+  let best = null;
+  state.events.forEach(e=>{
+    const result = computeBankingForEvent(e);
+    if(result && (!best || result.daysUntil < best.daysUntil)){
+      best = result;
+    }
+  });
+  return best;
+}
+
+function planTonight(targetWakeStr){
+  const tbase = computeTbaseMin();
+  const debt = accumulatedDebtMin();
+  const banking = computeSleepBanking();
+  const bankingMin = banking ? banking.dailyBankingMin : 0;
+  const targetSleepMin = computeTargetSleepMin(tbase, bankingMin, debt);
+  const recommendedCycles = recommendedCycleFor(targetSleepMin);
+
+  // Recommended vs. manually-selected cycle are kept as two distinct values:
+  // `recommendedCycles` is always the fresh formula result (Target Sleep is
+  // NEVER altered by a manual choice — banking flows into Target Sleep, never
+  // directly into Bedtime); `chosenN` (used only for the displayed Bedtime) is
+  // the manual override when present, else the recommendation. No upper bound
+  // on manual cycles — matches the "no maximum cycle" rule.
+  const manual = state.profile && state.profile.manualCycles;
+  const chosenN = (manual >= 1) ? manual : recommendedCycles;
+  const chosen = { n: chosenN, min: chosenN * 90 };
+
+  const wakeMin = timeToMinutes(targetWakeStr);
+  const bedMin = computeBedtimeMin(wakeMin, chosen.n);
+  return { bedMin, wakeMin, cycles:chosen.n, totalMin:chosen.min, recommendedCycles, banking };
+}
+
+/* ---------------- Home render ---------------- */
+function renderHome(){
+  document.getElementById('home-greeting-name').textContent = 'Hi, ' + (state.profile.name.split(' ')[0] || 'Friend');
+  const hour = bangkokNow().getUTCHours();
+  document.getElementById('home-greeting-eyebrow').textContent = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  renderAvatars();
+
+  const g = gaugeInfo();
+  const arc = document.getElementById('gauge-arc');
+  const maxDash = 302;
+  const pct = Math.min(g.hrs / 20, 1);
+  arc.setAttribute('stroke-dashoffset', String(maxDash - pct*maxDash*0.995));
+  arc.setAttribute('stroke', g.color);
+  document.getElementById('gauge-value').textContent = (g.debtMin>0? '-':'') + minutesToLabel(g.debtMin);
+  const chip = document.getElementById('gauge-chip');
+  chip.textContent = g.level; chip.className = 'chip ' + g.chipClass;
+  const statusPhrase = g.level === 'Healthy' ? "You're doing great" : g.level === 'Mild fatigue' ? "You're doing okay" : "You need rest";
+  document.getElementById('gauge-status-line').textContent = statusPhrase;
+
+  // Recovery Plan (Sleep Banking) is computed independently of Tonight Plan —
+  // it never needs a Target Wake Time, per the Recovery→Tonight flow.
+  const banking = computeSleepBanking();
+
+  // Tonight Plan always shows ONLY today's real local date — never a range.
+  document.getElementById('tonight-date').textContent = fmtDateLabel(todayStr());
+
+  // Tonight Plan only exists once a Target Wake Time has been set. Never invent
+  // a Bedtime from a fallback default — show a setup prompt instead.
+  const contentRows = document.getElementById('plan-content-rows');
+  const setupPrompt = document.getElementById('plan-setup-prompt');
+  let plan = null;
+  if(state.profile.targetWake){
+    plan = planTonight(state.profile.targetWake);
+    contentRows.style.display = 'block';
+    setupPrompt.style.display = 'none';
+    document.getElementById('plan-bedtime').textContent = clockLabelFromMinutes(plan.bedMin);
+    document.getElementById('plan-wake').textContent = clockLabelFromMinutes(plan.wakeMin);
+    document.getElementById('plan-hours').textContent = minutesToLabel(plan.totalMin);
+    document.getElementById('plan-cycles-label').textContent = `${plan.cycles} cycle${plan.cycles>1?'s':''}`;
+    const recEl = document.getElementById('home-recommendation');
+    if(banking){
+      recEl.textContent = '';
+    }else if(g.level === 'High'){
+      recEl.textContent = 'Try sleeping 30 min earlier tonight.';
+    }else if(g.level === 'Mild fatigue'){
+      recEl.textContent = 'A little earlier tonight would help.';
+    }else{
+      recEl.textContent = "You're on track — keep this bedtime.";
+    }
+  }else{
+    contentRows.style.display = 'none';
+    setupPrompt.style.display = 'block';
+  }
+  window._lastPlan = plan;
+
+  // Recovery guidance is shown whenever banking is active, independent of
+  // whether Tonight's schedule (above) exists yet — Recovery never needs a
+  // Wake Time (TEST 3: Event + No Wake Time still shows this highlight).
+  const bankingNote = document.getElementById('plan-banking-note');
+  if(banking){
+    bankingNote.style.display = 'block';
+    document.getElementById('plan-banking-text').textContent =
+      `\u{1F319} Tonight, sleep +${minutesToLabel(Math.round(banking.dailyBankingMin))}`;
+    document.getElementById('plan-banking-subtext').textContent =
+      `To prepare for ${banking.event.name} · ${fmtDateLabel(banking.event.date)}`;
+  }else{
+    bankingNote.style.display = 'none';
+  }
+
+  // Upcoming Event card shows the actual event, not a vague count.
+  const upcoming = state.events.filter(isEventUpcoming).sort((a,b)=> a.date.localeCompare(b.date));
+  const eventContent = document.getElementById('home-event-content');
+  if(upcoming.length){
+    const ev = upcoming[0];
+    const evBanking = computeBankingForEvent(ev);
+    eventContent.innerHTML = `
+      <div style="font-weight:800; font-size:16px; margin-top:4px;">${ev.name}</div>
+      <p class="subtext" style="margin-top:2px;">${fmtDateLabel(ev.date)} · ${clockLabelFromHHMM(ev.time || '00:00')}</p>
+      ${evBanking ? `
+        <p style="font-weight:700; color:var(--lavender); margin-top:10px;">Sleep +${minutesToLabel(Math.round(evBanking.dailyBankingMin))}/night</p>
+        <p class="subtext" style="margin-top:1px;">${evBanking.bankingDays} night${evBanking.bankingDays>1?'s':''}</p>
+      ` : ''}
+      <button class="linklike" style="margin-top:10px;" onclick="setNav('screen-event')">View Event &#8594;</button>
+    `;
+  }else{
+    eventContent.innerHTML = `
+      <div class="fox-wrap" style="margin:6px 0 8px; justify-content:flex-start;">
+        <svg width="40" height="40" viewBox="0 0 128 128" fill="none">
+          <path d="M42 54 L30 22 L60 40 Z" fill="#D2B8E8"/><path d="M86 54 L98 22 L68 40 Z" fill="#D2B8E8"/>
+          <ellipse cx="64" cy="74" rx="32" ry="29" fill="#D2B8E8"/>
+          <circle cx="55.5" cy="70" r="3.4" fill="#4A3F66"/><circle cx="72.5" cy="70" r="3.4" fill="#4A3F66"/>
+          <path d="M64 74 L60.5 79 L67.5 79 Z" fill="#EFA0B4"/>
+        </svg>
+      </div>
+      <p class="subtext">No events yet — add one so Nox can help you prepare.</p>
+      <button class="linklike" style="margin-top:8px;" onclick="setNav('screen-event')">Add Event &#8594;</button>
+    `;
+  }
+
+  const rpSubtext = document.getElementById('recovery-subtext');
+  const rpDays = document.getElementById('recovery-days');
+  const rpLink = document.getElementById('rp-view-link');
+  const rpWarning = document.getElementById('home-rp-warning');
+  if(banking){
+    const b = banking;
+    rpSubtext.textContent = `Sleep +${minutesToLabel(Math.round(b.dailyBankingMin))}/night to prepare for ${b.event.name} · ${fmtDateLabel(b.event.date)}.`;
+    rpDays.innerHTML = Array.from({length: Math.min(b.bankingDays,7)}).map((_, i)=>{
+      const dayDate = shiftDateStr(b.event.date, (i+1) - b.bankingDays - 1);
+      return `<div class="row-between" style="padding:8px 0; ${i>0?'border-top:1px solid var(--border);':''}">
+        <span class="subtext">${fmtDateLabel(dayDate)} · Day ${i+1}</span>
+        <span style="font-weight:700; font-size:13px; color:var(--lavender);">+${minutesToLabel(Math.round(b.dailyBankingMin))}</span>
+      </div>`;
+    }).join('');
+    rpLink.style.display = 'block';
+    rpWarning.style.display = b.capped ? 'block' : 'none';
+  }else{
+    rpSubtext.textContent = 'No active recovery plan right now.';
+    rpDays.innerHTML = '';
+    rpLink.style.display = 'none';
+    rpWarning.style.display = 'none';
+  }
+
+  const adviceEl = document.getElementById('ai-advice-text');
+  const actionBtn = document.getElementById('ai-advice-action');
+  if(state.logs.length < 3){
+    adviceEl.textContent = "Log a few nights to get started.";
+    actionBtn.textContent = 'Go to logging';
+    actionBtn.style.display = 'flex';
+    actionBtn.onclick = ()=> setNav('screen-logging');
+  } else if(g.hrs >= 8){
+    adviceEl.textContent = "Sleep debt is high. Rest up tonight.";
+    actionBtn.textContent = "View tonight's plan";
+    actionBtn.style.display = 'flex';
+    actionBtn.onclick = ()=> document.getElementById('plan-content-rows').scrollIntoView({behavior:'smooth'});
+  } else if(upcoming.length){
+    adviceEl.textContent = `"${upcoming[0].name}" is coming up soon.`;
+    actionBtn.textContent = 'View event';
+    actionBtn.style.display = 'flex';
+    actionBtn.onclick = ()=> setNav('screen-event');
+  } else {
+    adviceEl.textContent = "You're sleeping consistently. Nice work.";
+    actionBtn.style.display = 'none';
+  }
+}
+let editSelectedCycles = null;
+let editRecommendedCycles = null;
+function openEditPlan(){
+  const wakeVal = state.profile.targetWake || '';
+  document.getElementById('edit-wake').value = wakeVal;
+  // '00:00' here is only a safe dummy so planTonight() can compute the cycle
+  // recommendation (which never actually depends on wake time). Its bedMin/wakeMin
+  // are ignored below when no real wake time has been set — see updateEditBedtimePreview().
+  const plan = planTonight(wakeVal || '00:00');
+  editRecommendedCycles = plan.recommendedCycles;
+  editSelectedCycles = (state.profile.manualCycles >= 1)
+    ? state.profile.manualCycles : plan.recommendedCycles;
+  renderCycleOptions();
+  updateEditBedtimePreview();
+  document.getElementById('modal-editplan').classList.add('active');
+}
+function renderCycleOptions(){
+  const container = document.getElementById('cycle-options');
+  // No maximum cycle count — the list always covers at least 1-6, and extends
+  // further whenever the recommended or currently-selected cycle exceeds 6.
+  const maxN = Math.max(6, editRecommendedCycles || 0, editSelectedCycles || 0);
+  const options = [];
+  for(let n=1; n<=maxN; n++) options.push(n);
+  container.innerHTML = options.map(n=>{
+    const isRec = n === editRecommendedCycles;
+    const isSel = n === editSelectedCycles;
+    return `<div class="cycle-option ${isSel?'selected':''}" onclick="selectCycleOption(${n})">
+      <div class="cycle-radio ${isSel?'checked':''}"></div>
+      <div class="cycle-info">
+        <span class="cycle-title">${n} Cycle${n>1?'s':''} — ${minutesToLabel(n*90)}</span>
+        ${isRec ? '<span class="cycle-rec-badge">Recommended</span>' : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+function selectCycleOption(n){
+  editSelectedCycles = n;
+  renderCycleOptions();
+  updateEditBedtimePreview();
+}
+function updateEditBedtimePreview(){
+  const wakeVal = document.getElementById('edit-wake').value;
+  const previewEl = document.getElementById('edit-bedtime-preview');
+  if(!wakeVal){
+    previewEl.textContent = 'Set wake-up time';
+    return;
+  }
+  const wakeMin = timeToMinutes(wakeVal);
+  const bedMin = computeBedtimeMin(wakeMin, editSelectedCycles);
+  previewEl.textContent = clockLabelFromMinutes(bedMin);
+}
+function applyEditPlan(){
+  const wakeVal = document.getElementById('edit-wake').value;
+  if(!wakeVal){ showToast('Please set a wake-up time'); return; }
+  state.profile.targetWake = wakeVal;
+  // Only persist a manual override when the user's final selection genuinely
+  // differs from the system recommendation at save time. If it matches the
+  // recommendation — whether because they never touched the picker, or clicked
+  // their way back to it — there is nothing to override, so we clear any old
+  // override instead of freezing it. This is what lets Recovery automatically
+  // flow into Tonight without ever requiring an Edit → Save round trip: only a
+  // genuine, intentional divergence from the recommendation is ever stored.
+  state.profile.manualCycles = (editSelectedCycles !== editRecommendedCycles) ? editSelectedCycles : null;
+  closeModal('modal-editplan');
+  renderHome();
+  persistState();
+  showToast('Plan updated');
+}
+
+/* ---------------- Logging render ---------------- */
+let editingLogDate = null;
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const WEEKDAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function fmtDateLabel(dateStr){
+  const [, m, d] = dateStr.split('-').map(Number);
+  return `${MONTH_ABBR[m-1]} ${d}`;
+}
+function weekdayAbbr(dateStr){
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return WEEKDAY_ABBR[new Date(Date.UTC(y, m-1, d)).getUTCDay()];
+}
+function fmtClockFromHHMM(hhmm){
+  return clockLabelFromHHMM(hhmm);
+}
+function resetLogForm(){
+  editingLogDate = null;
+  document.getElementById('log-date').value = todayStr();
+  document.getElementById('log-date').max = todayStr();
+  document.getElementById('log-sleep').value = '22:30';
+  document.getElementById('log-wake').value = '06:30';
+  document.getElementById('log-actual').textContent = minutesToLabel(durationFromTimes('22:30','06:30'));
+  document.getElementById('log-save-btn').textContent = 'Save Sleep';
+  document.getElementById('log-cancel-btn').style.display = 'none';
+}
+function renderLogging(){
+  document.getElementById('log-date').max = todayStr();
+  if(!document.getElementById('log-date').value){ resetLogForm(); }
+  const list = document.getElementById('log-history');
+  const sorted = [...state.logs].sort((a,b)=> b.date.localeCompare(a.date));
+  if(!sorted.length){
+    list.innerHTML = `<div class="empty-state">
+      <div class="fox-wrap" style="margin-bottom:8px;">
+        <svg width="48" height="48" viewBox="0 0 128 128" fill="none">
+          <path d="M42 53 L32 24 L59 39 Z" fill="#D2B8E8"/><path d="M86 53 L96 24 L69 39 Z" fill="#D2B8E8"/>
+          <ellipse cx="64" cy="74" rx="32" ry="29" fill="#D2B8E8"/>
+          <path d="M51 70 Q55.5 65.5 60 70" stroke="#4A3F66" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+          <path d="M68 70 Q72.5 65.5 77 70" stroke="#4A3F66" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+          <path d="M64 74 L60.5 79 L67.5 79 Z" fill="#EFA0B4"/>
+        </svg>
+      </div>
+      <p>No nights logged yet 🌙<br>Your first entry helps Nox learn your pattern.</p>
+    </div>`;
+    return;
+  }
+  list.innerHTML = sorted.map(l=>{
+    return `<div class="card" style="padding:14px 18px; margin-bottom:10px;">
+      <div class="row-between">
+        <span style="font-weight:600; font-size:14px;">${fmtDateLabel(l.date)}</span>
+        <div style="display:flex; gap:14px;">
+          <button class="linklike" onclick="editLogRecord('${l.date}')">Edit</button>
+          <button class="linklike" style="color:var(--red);" onclick="deleteLogRecord('${l.date}')">Delete</button>
+        </div>
+      </div>
+      <div class="row-between" style="margin-top:6px;">
+        <span class="subtext">${fmtClockFromHHMM(l.sleepTime)} &#8594; ${fmtClockFromHHMM(l.wakeTime)}</span>
+        <span style="font-weight:600; font-size:13px;">${minutesToLabel(l.durationMin)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+let pendingDeleteLogDate = null;
+function deleteLogRecord(dateStr){
+  pendingDeleteLogDate = dateStr;
+  document.getElementById('modal-delete-log').classList.add('active');
+}
+function confirmDeleteLog(){
+  if(!pendingDeleteLogDate) return;
+  const dateStr = pendingDeleteLogDate;
+  // Target the exact record by its unique date key — never touches any other entry.
+  state.logs = state.logs.filter(l=> l.date !== dateStr);
+  if(editingLogDate === dateStr){ resetLogForm(); }
+  persistState();
+  pendingDeleteLogDate = null;
+  closeModal('modal-delete-log');
+  // Re-render every screen whose values depend on the deleted record, so
+  // everything is correct immediately with no page refresh needed.
+  renderLogging();
+  renderHome();
+  renderStats();
+  showToast('Record deleted');
+}
+function editLogRecord(dateStr){
+  const rec = state.logs.find(l=> l.date === dateStr);
+  if(!rec) return;
+  editingLogDate = dateStr;
+  document.getElementById('log-date').value = rec.date;
+  document.getElementById('log-sleep').value = rec.sleepTime;
+  document.getElementById('log-wake').value = rec.wakeTime;
+  document.getElementById('log-actual').textContent = minutesToLabel(rec.durationMin);
+  document.getElementById('log-save-btn').textContent = 'Update record';
+  document.getElementById('log-cancel-btn').style.display = 'block';
+  document.querySelector('#screen-logging .scroll').scrollTo({ top:0, behavior:'smooth' });
+}
+function cancelEditLog(){
+  resetLogForm();
+}
+function saveLog(){
+  const dateVal = document.getElementById('log-date').value;
+  const sleepTime = document.getElementById('log-sleep').value;
+  const wakeTime = document.getElementById('log-wake').value;
+  if(!dateVal){ showToast('Please choose a date'); return; }
+  if(dateVal > todayStr()){ showToast("You can't log a future date"); return; }
+  // A record dated today cannot claim a wake-up time later than the real,
+  // current Bangkok clock time — that moment genuinely hasn't happened yet.
+  // This never changes the meaning of the Date itself, only blocks a save
+  // whose time component is actually in the future.
+  if(dateVal === todayStr() && timeToMinutes(wakeTime) > bangkokNowMinutes()){
+    showToast("That wake-up time hasn't happened yet");
+    return;
+  }
+  const durationMin = durationFromTimes(sleepTime, wakeTime);
+
+  const existingIdx = state.logs.findIndex(l=> l.date === dateVal);
+  if(existingIdx > -1){
+    state.logs[existingIdx] = { date: dateVal, sleepTime, wakeTime, durationMin };
+  }else{
+    state.logs.push({ date: dateVal, sleepTime, wakeTime, durationMin });
+  }
+  persistState();
+  const wasEditing = !!editingLogDate;
+  resetLogForm();
+  renderLogging();
+  if(wasEditing){ showToast('Record updated'); } else { showFoxToast('Sleep Recorded Successfully'); }
+}
+document.addEventListener('input', (e)=>{
+  if(e.target.id==='log-sleep' || e.target.id==='log-wake'){
+    const s = document.getElementById('log-sleep').value, w = document.getElementById('log-wake').value;
+    document.getElementById('log-actual').textContent = minutesToLabel(durationFromTimes(s,w));
+  }
+  if(e.target.id==='su-username'){ updateUsernameStatus(); }
+  if(e.target.id==='su-password'){ updatePasswordChecklist(); }
+  if(e.target.id==='edit-wake'){ updateEditBedtimePreview(); }
+  if(e.target.id==='ev-date'){ suggestBankingDaysForDate(e.target.value); }
+});
+
+/* ---------------- Stats render ---------------- */
+let chartDebt, chartWeek;
+let statPeriod = 7;
+function setStatPeriod(days){
+  statPeriod = days;
+  document.getElementById('period-btn-7').classList.toggle('selected', days===7);
+  document.getElementById('period-btn-30').classList.toggle('selected', days===30);
+  renderStats();
+}
+
+function computeConsistency(mins){
+  if(mins.length < 2) return null;
+  const avg = mins.reduce((a,b)=>a+b,0)/mins.length;
+  const variance = mins.reduce((a,m)=> a + Math.pow(m-avg,2), 0) / mins.length;
+  const stdMin = Math.sqrt(variance);
+  // A ~90min (one sleep cycle) swing night-to-night maps to 0% consistency; 0 swing = 100%.
+  return Math.round(Math.max(0, Math.min(100, 100 - (stdMin/90)*100)));
+}
+
+function renderStats(){
+  const all = sortedLogs();
+  const periodLogs = all.slice(-statPeriod);
+  const gridColor = '#F1EAFB';
+  const textColor = '#A79FBD';
+  const baseOpts = {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ display:false } },
+    scales:{
+      x:{ ticks:{ color:textColor, font:{size:10}, maxRotation:0, autoSkip:true, maxTicksLimit: statPeriod>7?6:7 }, grid:{ display:false } },
+      y:{ ticks:{ color:textColor, font:{size:10} }, grid:{ color:gridColor } }
+    }
+  };
+
+  // ---- Summary cards ----
+  // Sleep Debt uses the SAME shared accumulatedDebtMin() as Home — always the
+  // latest 7 calendar days, regardless of which chart period (7/30) is selected.
+  document.getElementById('stat-debt-value').textContent = minutesToLabel(accumulatedDebtMin());
+  if(periodLogs.length){
+    const mins = periodLogs.map(l=>l.durationMin);
+    const avgMin = mins.reduce((a,b)=>a+b,0)/mins.length;
+    document.getElementById('stat-avg-value').textContent = minutesToLabel(Math.round(avgMin));
+  }else{
+    document.getElementById('stat-avg-value').textContent = '–';
+  }
+
+  const dayLabels = periodLogs.map(l=> fmtDateLabel(l.date));
+  const dayHrs = periodLogs.map(l=> Math.round(l.durationMin/6)/10);
+  const targetHrs = state.profile ? Math.round(computeTbaseMin()/6)/10 : null;
+  const debtHrs = periodLogs.map(l=> Math.round(dailyDebtMin(l.durationMin)/6)/10);
+  const today = todayStr();
+  const todayIdx = periodLogs.findIndex(l=> l.date === today);
+
+  document.getElementById('sleep-goal-legend').style.display = targetHrs ? 'inline' : 'none';
+  document.getElementById('day-detail-text').style.display = 'none';
+  document.getElementById('debt-detail-text').style.display = 'none';
+  const weekCanvas = document.getElementById('chart-week');
+  const debtCanvas = document.getElementById('chart-debt');
+  const weekError = document.getElementById('chart-week-error');
+  const debtError = document.getElementById('chart-debt-error');
+  weekCanvas.style.display = 'block'; debtCanvas.style.display = 'block';
+  weekError.style.display = 'none'; debtError.style.display = 'none';
+
+  if(!periodLogs.length){
+    weekCanvas.style.display = 'none'; debtCanvas.style.display = 'none';
+    weekError.style.display = 'flex'; debtError.style.display = 'flex';
+    weekError.querySelector('p').textContent = 'No sleep data yet 🌙 — start logging to see your stats.';
+    debtError.querySelector('p').textContent = 'No sleep data yet 🌙 — start logging to see your stats.';
+  }else{
+    try{
+      if(typeof Chart === 'undefined'){
+        throw new Error('Chart.js failed to load (likely a network or ad-blocker issue)');
+      }
+      if(chartWeek) chartWeek.destroy();
+      // "Sleep Pillows": soft vertical gradient per bar (a plain flat purple bar
+      // becomes a soft lavender pillow), with today's bar getting a warmer,
+      // slightly brighter gradient so it's subtly recognizable at a glance.
+      const barGradient = (ctx, isToday) => {
+        const chartArea = ctx.chart.chartArea;
+        if(!chartArea) return isToday ? '#B49CE8' : '#9B6FC0';
+        const g = ctx.chart.ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+        if(isToday){ g.addColorStop(0, '#C6AFF2'); g.addColorStop(1, '#9B79E0'); }
+        else { g.addColorStop(0, '#B49CE8'); g.addColorStop(1, '#8A6BC7'); }
+        return g;
+      };
+      const weekDatasets = [{
+        type:'bar', label:'Sleep', data:dayHrs,
+        backgroundColor: (ctx) => barGradient(ctx, ctx.dataIndex === todayIdx),
+        borderRadius:10, borderSkipped:false,
+        maxBarThickness: statPeriod>7?10:26
+      }];
+      if(targetHrs){
+        weekDatasets.push({
+          type:'line', label:'Sleep goal', data:periodLogs.map(()=>targetHrs),
+          borderColor:'#D2B8E8', borderDash:[4,4], borderWidth:1.5, pointRadius:0, fill:false
+        });
+      }
+      chartWeek = new Chart(weekCanvas, {
+        data:{ labels:dayLabels, datasets:weekDatasets },
+        options:{
+          ...baseOpts,
+          animation:{ duration:550, easing:'easeOutQuart' },
+          onClick:(evt, elements)=>{
+            if(!elements.length) return;
+            const idx = elements[0].index;
+            const l = periodLogs[idx];
+            if(!l) return;
+            const el = document.getElementById('day-detail-text');
+            let mood = '';
+            if(targetHrs){
+              const diffMin = l.durationMin - computeTbaseMin();
+              if(Math.abs(diffMin) <= 15) mood = 'Nice night! ✨';
+              else if(diffMin < 0) mood = 'A little more rest 🌙';
+              else mood = 'Extra cozy night ☁️';
+            }
+            const todayTag = l.date === today ? ' · Today' : '';
+            el.innerHTML = `&#127769; ${fmtDateLabel(l.date)}${todayTag}<br><span style="font-size:15px;">Sleep ${minutesToLabel(l.durationMin)}</span>${mood ? `<br><span style="font-size:12px; font-weight:600;">${mood}</span>` : ''}`;
+            el.style.display = 'block';
+          }
+        }
+      });
+
+      // "Moon Trail": the debt line's color responds to the CURRENT accumulated
+      // debt level — soft lavender when low, warm peach when moderate, soft
+      // coral when high — same thresholds as the Home gauge, display-only.
+      const g = gaugeInfo();
+      const trailColor = g.level === 'Healthy' ? '#8A6BC7' : g.level === 'Mild fatigue' ? '#D69A5C' : '#D9615C';
+      const trailFill = g.level === 'Healthy' ? 'rgba(138,107,199,.10)' : g.level === 'Mild fatigue' ? 'rgba(214,154,92,.10)' : 'rgba(217,97,92,.10)';
+
+      if(chartDebt) chartDebt.destroy();
+      chartDebt = new Chart(debtCanvas, {
+        type:'line',
+        data:{ labels:dayLabels, datasets:[{
+          data:debtHrs, borderColor:trailColor, backgroundColor:trailFill, fill:true,
+          tension:.42, borderWidth:2.5, pointRadius:statPeriod>7?0:4, pointHoverRadius:6,
+          pointBackgroundColor:'#FFFFFF', pointBorderColor:trailColor, pointBorderWidth:2
+        }] },
+        options:{
+          ...baseOpts,
+          animation:{ duration:550, easing:'easeOutQuart' },
+          onClick:(evt, elements)=>{
+            if(!elements.length) return;
+            const idx = elements[0].index;
+            const l = periodLogs[idx];
+            if(!l) return;
+            const el = document.getElementById('debt-detail-text');
+            const todayTag = l.date === today ? ' · Today' : '';
+            el.innerHTML = `&#127769; ${fmtDateLabel(l.date)}${todayTag}<br><span style="font-size:15px;">Sleep debt ${minutesToLabel(Math.round(dailyDebtMin(l.durationMin)))}</span>`;
+            el.style.display = 'block';
+          }
+        }
+      });
+    }catch(err){
+      console.error('Nox: chart rendering failed', err);
+      weekCanvas.style.display = 'none'; debtCanvas.style.display = 'none';
+      weekError.style.display = 'flex'; debtError.style.display = 'flex';
+      weekError.querySelector('p').textContent = "Charts couldn't load — check your connection.";
+      debtError.querySelector('p').textContent = "Charts couldn't load — check your connection.";
+    }
+  }
+
+  // ---- Debt trend chip ----
+  const trendChip = document.getElementById('debt-trend-chip');
+  if(periodLogs.length >= 3){
+    const mid = Math.ceil(periodLogs.length/2);
+    const firstAvg = periodLogs.slice(0,mid).reduce((a,l)=>a+dailyDebtMin(l.durationMin),0)/mid;
+    const secondAvg = periodLogs.slice(mid).reduce((a,l)=>a+dailyDebtMin(l.durationMin),0)/(periodLogs.length-mid);
+    const diff = secondAvg - firstAvg;
+    if(diff < -15){ trendChip.textContent='Improving'; trendChip.className='chip chip-green'; }
+    else if(diff > 15){ trendChip.textContent='Needs attention'; trendChip.className='chip chip-red'; }
+    else { trendChip.textContent='Stable'; trendChip.className='chip chip-yellow'; }
+  }else{
+    trendChip.textContent='Not enough data'; trendChip.className='chip chip-yellow';
+  }
+
+  // ---- Single insight ----
+  document.getElementById('stat-insight-text').textContent = generateSingleInsight(periodLogs);
+}
+
+/* One short, prioritized insight — never more than a sentence. */
+function generateSingleInsight(periodLogs){
+  if(periodLogs.length < 3) return "Log a few more nights to see insights.";
+  let worst = periodLogs[0];
+  periodLogs.forEach(l=>{ if(dailyDebtMin(l.durationMin) > dailyDebtMin(worst.durationMin)) worst = l; });
+  const mid = Math.ceil(periodLogs.length/2);
+  const firstAvg = periodLogs.slice(0,mid).reduce((a,l)=>a+dailyDebtMin(l.durationMin),0)/mid;
+  const secondAvg = periodLogs.slice(mid).reduce((a,l)=>a+dailyDebtMin(l.durationMin),0)/(periodLogs.length-mid);
+  const diff = secondAvg - firstAvg;
+
+  if(diff < -15) return "Your sleep debt is improving.";
+  if(diff > 15) return "Try sleeping 30 min earlier.";
+  if(dailyDebtMin(worst.durationMin) > 60) return `${fmtDateLabel(worst.date)} had your shortest sleep.`;
+  return "Your sleep has been fairly steady.";
+}
+
+/* ---------------- Events render ---------------- */
+let eventTab = 'upcoming';
+function switchEventTab(tab){
+  eventTab = tab;
+  document.getElementById('tab-upcoming').classList.toggle('selected', tab==='upcoming');
+  document.getElementById('tab-history').classList.toggle('selected', tab==='history');
+  renderEvents();
+}
+function renderEvents(){
+  const list = document.getElementById('event-list');
+  const items = state.events.filter(e => eventTab==='upcoming' ? isEventUpcoming(e) : !isEventUpcoming(e));
+  if(!items.length){
+    list.innerHTML = `<div class="empty-state">
+      <div class="fox-wrap" style="margin-bottom:10px;">
+        <svg width="56" height="56" viewBox="0 0 128 128" fill="none">
+          <path d="M42 54 L30 22 L60 40 Z" fill="#D2B8E8"/><path d="M86 54 L98 22 L68 40 Z" fill="#D2B8E8"/>
+          <path d="M44 48 L37 28 L56 39 Z" fill="#F6BFCB"/><path d="M84 48 L91 28 L72 39 Z" fill="#F6BFCB"/>
+          <ellipse cx="64" cy="74" rx="32" ry="29" fill="#D2B8E8"/>
+          <path d="M51 70 Q55.5 65.5 60 70" stroke="#4A3F66" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+          <path d="M68 70 Q72.5 65.5 77 70" stroke="#4A3F66" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+          <path d="M64 74 L60.5 79 L67.5 79 Z" fill="#EFA0B4"/>
+        </svg>
+      </div>
+      <h3>${eventTab==='upcoming' ? 'No upcoming events ✨' : 'No history yet'}</h3>
+      <p>${eventTab==='upcoming' ? 'Add an event so Nox can help you plan extra sleep before it.' : "Events you've completed will show up here."}</p>
+      ${eventTab==='upcoming' ? '<button class="btn btn-primary btn-sm" onclick="openAddEvent()">+ Add event</button>' : ''}
+    </div>`;
+    return;
+  }
+  const sorted = [...items].sort((a,b)=> eventTab==='upcoming' ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
+  list.innerHTML = sorted.map(e=>{
+    const banking = computeBankingForEvent(e);
+    return `
+    <div class="card" style="margin-bottom:10px;">
+      <div class="row-between">
+        <span style="font-weight:700;">${e.name}</span>
+        <button class="linklike" onclick="openEditEvent('${e.id}')">Edit</button>
+      </div>
+      <p class="subtext" style="margin-top:2px;">${fmtDateLabel(e.date)} · ${clockLabelFromHHMM(e.time || '00:00')}</p>
+      ${banking ? `
+        <div style="margin-top:10px; padding:10px 12px; background:var(--lavender-dim); border-radius:12px;">
+          <p style="font-size:11px; font-weight:700; color:var(--text-mute); text-transform:uppercase; letter-spacing:.03em; margin:0;">Recovery needed</p>
+          <p style="font-weight:800; color:var(--fox-dark); margin:2px 0 8px;">+${minutesToLabel(Math.round(banking.dailyBankingMin))}/night · ${banking.bankingDays} night${banking.bankingDays>1?'s':''}</p>
+          <button class="linklike" onclick="openRecoveryPlanForEvent('${e.id}')">View Recovery Plan</button>
+        </div>
+      ` : `<p class="subtext" style="margin-top:8px;">Expected sleep: ${e.expectedHrs} hrs</p>`}
+      ${e.note ? `<p class="subtext" style="margin-top:6px;">${e.note}</p>` : ''}
+    </div>
+  `;
+  }).join('');
+}
+
+/* ---------------- Add / Edit / Delete Event ---------------- */
+let editingEventId = null;
+function suggestBankingDaysForDate(dateVal){
+  if(!dateVal) return;
+  const today = todayStr();
+  if(dateVal <= today) return;
+  const daysUntil = daysBetweenDates(today, dateVal);
+  const suggested = Math.min(Math.max(daysUntil, 3), 7);
+  document.getElementById('ev-bankingdays').value = String(suggested);
+}
+function openAddEvent(){
+  editingEventId = null;
+  document.getElementById('addevent-title').textContent = 'Add event';
+  document.getElementById('ev-save-btn').textContent = 'Create plan';
+  document.getElementById('ev-delete-btn').style.display = 'none';
+  document.getElementById('ev-name').value = '';
+  document.getElementById('ev-date').value = '';
+  document.getElementById('ev-date').min = todayStr();
+  document.getElementById('ev-time').value = '09:00';
+  document.getElementById('ev-sleep').value = '5';
+  document.getElementById('ev-bankingdays').value = '4';
+  document.getElementById('ev-note').value = '';
+  goTo('screen-addevent');
+}
+function openEditEvent(id){
+  const e = state.events.find(ev=> ev.id === id);
+  if(!e) return;
+  editingEventId = id;
+  document.getElementById('addevent-title').textContent = 'Edit event';
+  document.getElementById('ev-save-btn').textContent = 'Save changes';
+  document.getElementById('ev-delete-btn').style.display = 'block';
+  document.getElementById('ev-name').value = e.name;
+  document.getElementById('ev-date').value = e.date;
+  document.getElementById('ev-date').min = '';
+  document.getElementById('ev-time').value = e.time || '09:00';
+  document.getElementById('ev-sleep').value = String(e.expectedHrs);
+  document.getElementById('ev-bankingdays').value = String(e.bankingDays || 4);
+  document.getElementById('ev-note').value = e.note || '';
+  goTo('screen-addevent');
+}
+function submitNewEvent(){
+  const name = document.getElementById('ev-name').value.trim();
+  const date = document.getElementById('ev-date').value;
+  const time = document.getElementById('ev-time').value;
+  const expectedHrs = document.getElementById('ev-sleep').value;
+  const bankingDays = Number(document.getElementById('ev-bankingdays').value);
+  const note = document.getElementById('ev-note').value.trim();
+  if(!name || !date){ showToast('Add an event name and date'); return; }
+
+  let savedEvent;
+  if(editingEventId){
+    const idx = state.events.findIndex(ev=> ev.id === editingEventId);
+    if(idx > -1){
+      state.events[idx] = { ...state.events[idx], name, date, time, expectedHrs, bankingDays, note };
+      savedEvent = state.events[idx];
+    }
+    showToast('Changes saved');
+  }else{
+    savedEvent = { id: genId(), name, date, time, expectedHrs, bankingDays, note };
+    state.events.push(savedEvent);
+    showToast('Plan created');
+  }
+  editingEventId = null;
+  persistState();
+  renderHome();
+
+  const banking = savedEvent ? computeBankingForEvent(savedEvent) : null;
+  if(banking){
+    renderRecoveryPlan(banking);
+    goTo('screen-recoveryplan');
+  }else{
+    goTo('screen-event'); setNav('screen-event');
+  }
+}
+function renderRecoveryPlan(banking){
+  const e = banking.event;
+  document.getElementById('rp-event-name').textContent = e.name;
+  document.getElementById('rp-event-date').textContent = fmtDateLabel(e.date);
+  document.getElementById('rp-nightly-amount').textContent = `+${minutesToLabel(Math.round(banking.dailyBankingMin))} / night`;
+  document.getElementById('rp-night-count').textContent = `${banking.bankingDays} night${banking.bankingDays>1?'s':''}`;
+
+  const rows = [];
+  for(let i=1; i<=banking.bankingDays; i++){
+    const dayDate = shiftDateStr(e.date, i - banking.bankingDays - 1);
+    rows.push(`<div class="row-between" style="padding:12px 16px; background:var(--panel); border:1px solid var(--border); border-radius:12px; margin-bottom:8px;">
+      <span style="font-weight:600; font-size:14px;">${fmtDateLabel(dayDate)} · Day ${i}</span>
+      <span style="font-weight:700; color:var(--lavender);">+${minutesToLabel(Math.round(banking.dailyBankingMin))}</span>
+    </div>`);
+  }
+  rows.push(`<div class="row-between" style="padding:12px 16px; margin-bottom:8px;">
+    <span class="subtext">${fmtDateLabel(e.date)}</span>
+    <span class="subtext" style="font-weight:700;">Event day</span>
+  </div>`);
+  document.getElementById('rp-timeline').innerHTML = rows.join('');
+  document.getElementById('rp-warning').style.display = banking.capped ? 'block' : 'none';
+}
+function viewDashboardFromRecovery(){
+  setNav('screen-home');
+}
+function openRecoveryPlanFromHome(){
+  const banking = computeSleepBanking();
+  if(!banking) return;
+  renderRecoveryPlan(banking);
+  goTo('screen-recoveryplan');
+}
+function openRecoveryPlanForEvent(eventId){
+  const e = state.events.find(ev => ev.id === eventId);
+  if(!e) return;
+  const banking = computeBankingForEvent(e);
+  if(!banking) return;
+  renderRecoveryPlan(banking);
+  goTo('screen-recoveryplan');
+}
+function requestDeleteEvent(){
+  if(!editingEventId) return;
+  document.getElementById('modal-delete-event').classList.add('active');
+}
+function confirmDeleteEvent(){
+  if(editingEventId){
+    state.events = state.events.filter(ev=> ev.id !== editingEventId);
+    persistState();
+  }
+  closeModal('modal-delete-event');
+  editingEventId = null;
+  goTo('screen-event'); setNav('screen-event');
+  renderHome();
+  showToast('Event deleted');
+}
+
+/* ---------------- Me render ---------------- */
+function renderMe(){
+  document.getElementById('me-name').textContent = (state.profile && state.profile.name) || 'Nox User';
+  renderAvatars();
+  if(state.profile){
+    document.getElementById('me-personal-name').textContent = state.profile.name || '–';
+    document.getElementById('me-personal-age').textContent = state.profile.dob ? (getAge(state.profile.dob) + ' yrs') : '–';
+    document.getElementById('me-personal-gender').textContent = state.profile.gender || '–';
+    document.getElementById('me-sleep-wake').textContent = state.profile.targetWake ? clockLabelFromHHMM(state.profile.targetWake) : 'Not set';
+    document.getElementById('me-sleep-target').textContent = minutesToLabel(computeTbaseMin());
+  }
+}
+
+/* ---------------- Avatar upload ---------------- */
+function renderAvatars(){
+  const hasPhoto = !!(state.profile && state.profile.photo);
+  document.querySelectorAll('.avatar-photo-img').forEach(img=>{
+    img.src = hasPhoto ? state.profile.photo : '';
+    img.style.display = hasPhoto ? 'block' : 'none';
+  });
+  document.querySelectorAll('.avatar-default-fox').forEach(svg=>{
+    svg.style.display = hasPhoto ? 'none' : 'block';
+  });
+}
+function triggerAvatarUpload(){
+  document.getElementById('avatar-file-input').click();
+}
+function handleAvatarUpload(e){
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  if(!file.type.startsWith('image/')){ showToast('Please choose an image file'); e.target.value=''; return; }
+  if(file.size > 5*1024*1024){ showToast('Photo is too large — please choose one under 5MB'); e.target.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    if(!state.profile) return;
+    state.profile.photo = ev.target.result;
+    persistState();
+    renderAvatars();
+    showToast('Profile photo updated');
+  };
+  reader.onerror = function(){ showToast("Couldn't read that photo — try another"); };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+/* ---------------- Profile modal ---------------- */
+function openProfileModal(){
+  if(!state.profile) return;
+  document.getElementById('pf-name').value = state.profile.name || '';
+  document.getElementById('pf-dob').value = state.profile.dob || '';
+  document.getElementById('pf-exercise').value = state.profile.exercise || '1-2';
+  document.getElementById('pf-wake').value = state.profile.targetWake || '07:00';
+  document.querySelectorAll('#pf-gender .pill').forEach(p=>{
+    p.classList.toggle('selected', p.dataset.val === state.profile.gender);
+  });
+  renderAvatars();
+  document.getElementById('modal-profile').classList.add('active');
+}
+function saveProfileEdit(){
+  const name = document.getElementById('pf-name').value.trim();
+  const dob = document.getElementById('pf-dob').value;
+  const genderEl = document.querySelector('#pf-gender .pill.selected');
+  const exercise = document.getElementById('pf-exercise').value;
+  const targetWake = document.getElementById('pf-wake').value;
+  if(!name || !dob || !genderEl || !targetWake){ showToast('Please fill in all fields'); return; }
+  state.profile.name = name;
+  state.profile.dob = dob;
+  state.profile.gender = genderEl.dataset.val;
+  state.profile.exercise = exercise;
+  state.profile.targetWake = targetWake;
+  persistState();
+  closeModal('modal-profile');
+  renderMe();
+  renderHome();
+  showToast('Profile updated');
+}
+
+/* ---------------- My Goal modal ---------------- */
+function openGoalModal(){
+  if(!state.profile) return;
+  const tbase = computeTbaseMin();
+  document.getElementById('goal-tbase').textContent = minutesToLabel(tbase);
+  document.getElementById('goal-wake').textContent = state.profile.targetWake ? clockLabelFromHHMM(state.profile.targetWake) : 'Not set';
+  document.getElementById('goal-nights').textContent = state.logs.length;
+  document.getElementById('modal-goal').classList.add('active');
+}
+
+/* ---------------- Reminder modal ---------------- */
+function openReminderModal(){
+  if(!state.profile.reminders){
+    state.profile.reminders = { bedtime:true, wake:true, logging:false };
+  }
+  const r = state.profile.reminders;
+  document.getElementById('toggle-bedtime').classList.toggle('on', r.bedtime);
+  document.getElementById('toggle-wake').classList.toggle('on', r.wake);
+  document.getElementById('toggle-logging').classList.toggle('on', r.logging);
+  document.getElementById('modal-reminder').classList.add('active');
+}
+function toggleReminder(key){
+  if(!state.profile.reminders){ state.profile.reminders = { bedtime:true, wake:true, logging:false }; }
+  state.profile.reminders[key] = !state.profile.reminders[key];
+  document.getElementById('toggle-'+key).classList.toggle('on', state.profile.reminders[key]);
+  persistState();
+}
+
+async function resetData(){
+  if(!confirm('This deletes all your Nox data on this device. Continue?')) return;
+  await clearAllData();
+  goTo('screen-welcome');
+  showToast('Data cleared');
+}
+
+/* ---------------- Startup: load persisted data first ---------------- */
+const ONBOARDING_KEY = 'nox:onboarding-complete';
+async function init(){
+  renderBottomNav();
+  const loading = document.getElementById('screen-loading');
+  const found = await loadState();
+  loading.classList.remove('active');
+
+  let onboarded = false;
+  try{ onboarded = localStorage.getItem(ONBOARDING_KEY) === 'true'; }catch(err){ onboarded = false; }
+
+  if(!onboarded){
+    renderObDots();
+    goTo('screen-onboarding');
+    return;
+  }
+  if(found && state.profile){
+    enterApp();
+  }else{
+    goTo('screen-welcome');
+  }
+}
+
+/* ---------------- Onboarding ---------------- */
+const OB_STEP_COUNT = 7;
+let obStep = 0;
+function renderObDots(){
+  const dots = document.getElementById('ob-dots');
+  dots.innerHTML = '';
+  for(let i=0;i<OB_STEP_COUNT;i++){
+    const d = document.createElement('div');
+    d.className = 'ob-dot' + (i===obStep ? ' active' : '');
+    dots.appendChild(d);
+  }
+}
+function showObStep(n){
+  obStep = n;
+  document.querySelectorAll('.ob-panel').forEach(p=>{
+    p.classList.toggle('active', Number(p.dataset.step) === n);
+  });
+  renderObDots();
+  document.getElementById('ob-next-btn').textContent = (n === OB_STEP_COUNT-1) ? "Let's go" : 'Next';
+  document.querySelector('#screen-onboarding .scroll').scrollTo({ top:0 });
+}
+function obNext(){
+  if(obStep < OB_STEP_COUNT-1){
+    showObStep(obStep+1);
+  }else{
+    goTo('screen-terms');
+  }
+}
+function skipOnboarding(){
+  goTo('screen-terms');
+}
+
+/* ---------------- Terms & consent ---------------- */
+const consentState = { c1:false, c2:false, c3:false };
+function toggleConsent(key){
+  consentState[key] = !consentState[key];
+  document.getElementById('consent-'+key).classList.toggle('checked', consentState[key]);
+  const allChecked = consentState.c1 && consentState.c2 && consentState.c3;
+  const btn = document.getElementById('agree-btn');
+  btn.style.opacity = allChecked ? '1' : '.4';
+  btn.style.pointerEvents = allChecked ? 'auto' : 'none';
+}
+function agreeAndContinue(){
+  try{
+    localStorage.setItem(ONBOARDING_KEY, 'true');
+    localStorage.setItem('nox:consent', JSON.stringify({ ...consentState, agreedAt: new Date().toISOString() }));
+  }catch(err){ /* ignore — still let the user continue */ }
+  goTo('screen-welcome');
+}
+function updateStatusbarClock(){
+  const el = document.getElementById('statusbar-clock');
+  if(el) el.textContent = clockLabelFromMinutes(bangkokNow().getUTCHours()*60 + bangkokNow().getUTCMinutes());
+}
+updateStatusbarClock();
+setInterval(updateStatusbarClock, 30000);
+init();
+</script>
+</body>
+</html>
