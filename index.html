@@ -1603,23 +1603,99 @@ function showFoxToast(msg){
 function closeModal(id){ document.getElementById(id).classList.remove('active'); }
 
 /* ---------------- Auth flows ---------------- */
-function doLogin(){
+async function doLogin(){
   const u = document.getElementById('login-username').value.trim();
   const p = document.getElementById('login-password').value.trim();
   const err = document.getElementById('login-error');
   if(!u || !p){ err.textContent = 'Please enter your username and password.'; err.style.display='block'; return; }
-  if(!state.profile){
-    err.textContent = "No Nox account found yet — try Sign up instead.";
-    err.style.display='block';
+
+  // Fast path: this exact account already exists locally on this device —
+  // works even offline, and never touches Supabase.
+  if(state.profile && state.profile.username.toLowerCase() === u.toLowerCase() && state.profile.password === p){
+    err.style.display='none';
+    enterApp();
     return;
   }
-  if(state.profile.username.toLowerCase() !== u.toLowerCase() || state.profile.password !== p){
+
+  // Not found locally — this is the "logged in on another device" case.
+  // Look the account up on Supabase so it can log in here too.
+  if(!supabaseClient){
     err.textContent = 'Username or password is incorrect.';
     err.style.display='block';
     return;
   }
-  err.style.display='none';
-  enterApp();
+  const loginBtn = document.querySelector('#screen-login button.btn-primary');
+  if(loginBtn){ loginBtn.disabled = true; loginBtn.textContent = 'Checking…'; }
+  try{
+    const { data, error } = await supabaseClient
+      .from('users')
+      .select('*')
+      .ilike('username', u)
+      .maybeSingle();
+
+    if(error || !data || data.password !== p){
+      err.textContent = 'Username or password is incorrect.';
+      err.style.display='block';
+      return;
+    }
+
+    // Found on Supabase — pull the profile onto this device. If this device
+    // already has local sleep history for this exact username (e.g. it was
+    // used before and only the in-memory password check just failed), keep
+    // that history rather than wiping it; only start fresh for a genuinely
+    // new device.
+    const alreadyLocalForThisUser = state.profile && state.profile.username.toLowerCase() === data.username.toLowerCase();
+    state.profile = {
+      username: data.username,
+      password: data.password,
+      name: data.name,
+      dob: data.dob,
+      gender: data.gender,
+      exercise: data.exercise,
+      targetWake: data.target_wake,
+      manualCycles: data.manual_cycles ?? null,
+      photo: data.photo ?? null,
+      reminders: {
+        bedtime: data.reminder_bedtime ?? true,
+        wake: data.reminder_wake ?? true,
+        logging: data.reminder_logging ?? false
+      }
+    };
+    if(!alreadyLocalForThisUser){
+      // New device for this account — also pull down existing sleep logs
+      // and events from Supabase, so cross-device login carries real history,
+      // not just the profile. If this fetch fails for any reason, login still
+      // succeeds (the profile pull above already worked); it just falls back
+      // to starting with empty history on this device rather than blocking.
+      try{
+        const [logsResult, eventsResult] = await Promise.all([
+          supabaseClient.from('sleep_logs').select('*').eq('username', data.username),
+          supabaseClient.from('events').select('*').eq('username', data.username)
+        ]);
+        state.logs = (logsResult.data || []).map(r => ({
+          date: r.log_date, sleepTime: r.sleep_time, wakeTime: r.wake_time, durationMin: r.duration_min
+        }));
+        state.events = (eventsResult.data || []).map(r => ({
+          id: r.id, name: r.name, date: r.event_date, time: r.event_time || '',
+          expectedHrs: String(r.expected_hrs), bankingDays: r.banking_days, note: r.note || ''
+        }));
+      }catch(fetchErr){
+        console.error('Nox: Supabase logs/events fetch failed —', fetchErr);
+        state.logs = [];
+        state.events = [];
+      }
+    }
+    registerUsername(data.username);
+    persistState();
+    err.style.display='none';
+    enterApp();
+  }catch(ex){
+    console.error('Nox: Supabase login lookup failed —', ex);
+    err.textContent = 'Username or password is incorrect.';
+    err.style.display='block';
+  }finally{
+    if(loginBtn){ loginBtn.disabled = false; loginBtn.textContent = 'Log in'; }
+  }
 }
 function checkPasswordRules(pw){
   return {
@@ -1721,6 +1797,65 @@ async function syncUserToSupabase(profile){
   }catch(err){
     console.error('Nox: Supabase sync threw an exception —', err);
     showToast('Saved locally — Supabase sync failed (see console)');
+  }
+}
+/* Sleep log + Event sync — same fire-and-forget, never-block-the-UI pattern
+   as syncUserToSupabase(). Each local mutation (save/delete) also pushes to
+   Supabase in the background; failures are logged but never surfaced as a
+   blocking error, since localStorage always remains the source of truth on
+   THIS device regardless of whether the cloud copy is currently reachable. */
+async function syncLogToSupabase(log){
+  if(!supabaseClient || !state.profile) return;
+  try{
+    const { error } = await supabaseClient.from('sleep_logs').upsert({
+      username: state.profile.username,
+      log_date: log.date,
+      sleep_time: log.sleepTime,
+      wake_time: log.wakeTime,
+      duration_min: log.durationMin
+    }, { onConflict: 'username,log_date' });
+    if(error) console.error('Nox: Supabase sleep_logs sync failed —', error.message, error);
+    else console.log('Nox: sleep log synced to Supabase:', log.date);
+  }catch(err){
+    console.error('Nox: Supabase sleep_logs sync threw —', err);
+  }
+}
+async function deleteLogFromSupabase(dateStr){
+  if(!supabaseClient || !state.profile) return;
+  try{
+    const { error } = await supabaseClient.from('sleep_logs').delete()
+      .eq('username', state.profile.username).eq('log_date', dateStr);
+    if(error) console.error('Nox: Supabase sleep_logs delete failed —', error.message, error);
+  }catch(err){
+    console.error('Nox: Supabase sleep_logs delete threw —', err);
+  }
+}
+async function syncEventToSupabase(ev){
+  if(!supabaseClient || !state.profile) return;
+  try{
+    const { error } = await supabaseClient.from('events').upsert({
+      id: ev.id,
+      username: state.profile.username,
+      name: ev.name,
+      event_date: ev.date,
+      event_time: ev.time || null,
+      expected_hrs: Number(ev.expectedHrs),
+      banking_days: ev.bankingDays,
+      note: ev.note || null
+    }, { onConflict: 'id' });
+    if(error) console.error('Nox: Supabase events sync failed —', error.message, error);
+    else console.log('Nox: event synced to Supabase:', ev.id);
+  }catch(err){
+    console.error('Nox: Supabase events sync threw —', err);
+  }
+}
+async function deleteEventFromSupabase(id){
+  if(!supabaseClient) return;
+  try{
+    const { error } = await supabaseClient.from('events').delete().eq('id', id);
+    if(error) console.error('Nox: Supabase events delete failed —', error.message, error);
+  }catch(err){
+    console.error('Nox: Supabase events delete threw —', err);
   }
 }
 function enterApp(){
@@ -2243,6 +2378,7 @@ function confirmDeleteLog(){
   state.logs = state.logs.filter(l=> l.date !== dateStr);
   if(editingLogDate === dateStr){ resetLogForm(); }
   persistState();
+  deleteLogFromSupabase(dateStr);
   pendingDeleteLogDate = null;
   closeModal('modal-delete-log');
   // Re-render every screen whose values depend on the deleted record, so
@@ -2282,14 +2418,16 @@ function saveLog(){
     return;
   }
   const durationMin = durationFromTimes(sleepTime, wakeTime);
+  const savedLog = { date: dateVal, sleepTime, wakeTime, durationMin };
 
   const existingIdx = state.logs.findIndex(l=> l.date === dateVal);
   if(existingIdx > -1){
-    state.logs[existingIdx] = { date: dateVal, sleepTime, wakeTime, durationMin };
+    state.logs[existingIdx] = savedLog;
   }else{
-    state.logs.push({ date: dateVal, sleepTime, wakeTime, durationMin });
+    state.logs.push(savedLog);
   }
   persistState();
+  syncLogToSupabase(savedLog);
   const wasEditing = !!editingLogDate;
   resetLogForm();
   renderLogging();
@@ -2616,6 +2754,7 @@ function submitNewEvent(){
   }
   editingEventId = null;
   persistState();
+  if(savedEvent) syncEventToSupabase(savedEvent);
   renderHome();
 
   const banking = savedEvent ? computeBankingForEvent(savedEvent) : null;
@@ -2673,6 +2812,7 @@ function confirmDeleteEvent(){
   if(editingEventId){
     state.events = state.events.filter(ev=> ev.id !== editingEventId);
     persistState();
+    deleteEventFromSupabase(editingEventId);
   }
   closeModal('modal-delete-event');
   editingEventId = null;
@@ -2793,6 +2933,58 @@ async function resetData(){
   showToast('Data cleared');
 }
 
+/* Silent, idempotent "catch up" sync — runs once each time the app boots
+   with an existing local session. Unlike syncUserToSupabase() (insert-only,
+   used at signup, shows a toast), this uses upsert everywhere so it's safe
+   to repeat and never shows any UI — it just quietly ensures Supabase has
+   whatever is currently in localStorage, including logs/events that existed
+   before this sync feature was added. */
+async function backfillSyncToSupabase(){
+  if(!supabaseClient || !state.profile) return;
+  try{
+    await supabaseClient.from('users').upsert({
+      username: state.profile.username,
+      password: state.profile.password,
+      name: state.profile.name,
+      dob: state.profile.dob,
+      gender: state.profile.gender,
+      exercise: state.profile.exercise,
+      target_wake: state.profile.targetWake
+    }, { onConflict: 'username' });
+
+    if(state.logs.length){
+      await supabaseClient.from('sleep_logs').upsert(
+        state.logs.map(l => ({
+          username: state.profile.username,
+          log_date: l.date,
+          sleep_time: l.sleepTime,
+          wake_time: l.wakeTime,
+          duration_min: l.durationMin
+        })),
+        { onConflict: 'username,log_date' }
+      );
+    }
+    if(state.events.length){
+      await supabaseClient.from('events').upsert(
+        state.events.map(ev => ({
+          id: ev.id,
+          username: state.profile.username,
+          name: ev.name,
+          event_date: ev.date,
+          event_time: ev.time || null,
+          expected_hrs: Number(ev.expectedHrs),
+          banking_days: ev.bankingDays,
+          note: ev.note || null
+        })),
+        { onConflict: 'id' }
+      );
+    }
+    console.log('Nox: backfill sync to Supabase complete');
+  }catch(err){
+    console.error('Nox: backfill sync failed —', err);
+  }
+}
+
 /* ---------------- Startup: load persisted data first ---------------- */
 const ONBOARDING_KEY = 'nox:onboarding-complete';
 async function init(){
@@ -2811,6 +3003,7 @@ async function init(){
   }
   if(found && state.profile){
     enterApp();
+    backfillSyncToSupabase();
   }else{
     goTo('screen-welcome');
   }
