@@ -265,6 +265,24 @@ h1,h2,h3{ font-family:'Nunito',sans-serif; font-weight:700; color:var(--text); }
 @keyframes slideUp{ from{ transform:translateY(30px); opacity:0;} to{ transform:translateY(0); opacity:1;} }
 .modal-handle{ width:36px; height:4px; background:var(--border); border-radius:4px; margin:0 auto 16px; }
 
+/* ---------- Interactive Tutorial ---------- */
+.tutorial-overlay{
+  position:absolute; inset:0; display:none; z-index:70; pointer-events:none;
+}
+.tutorial-overlay.active{ display:block; }
+.tutorial-highlight{
+  position:absolute; border-radius:18px; pointer-events:none;
+  box-shadow:0 0 0 9999px rgba(20,10,40,.72);
+  border:2.5px solid var(--lavender);
+  transition:top .25s ease, left .25s ease, width .25s ease, height .25s ease;
+}
+.tutorial-tooltip{
+  position:absolute; left:16px; right:16px; z-index:71; pointer-events:auto;
+  background:var(--panel); border:1px solid var(--border); border-radius:18px;
+  padding:16px; box-shadow:0 12px 30px rgba(20,10,40,.3);
+  animation:fadeIn .2s ease;
+}
+
 .toast{
   position:absolute; bottom:100px; left:22px; right:22px; background:var(--panel-2); border:1px solid var(--border);
   border-radius:14px; padding:12px 16px; font-size:13px; text-align:center; opacity:0; pointer-events:none;
@@ -770,7 +788,7 @@ h1,h2,h3{ font-family:'Nunito',sans-serif; font-weight:700; color:var(--text); }
         </div>
         <h1 style="font-size:24px; margin-bottom:10px;" id="gs-name">You're all set!</h1>
         <p class="subtext" style="padding:0 10px 30px;">Nox has your profile ready. Let's plan your first night of better sleep.</p>
-        <button class="btn btn-primary" onclick="enterApp()">Get started</button>
+        <button class="btn btn-primary" onclick="finishGetStartedAndStartTutorial()">Get started</button>
       </div>
     </section>
 
@@ -937,6 +955,7 @@ h1,h2,h3{ font-family:'Nunito',sans-serif; font-weight:700; color:var(--text); }
           <div class="subtext">Actual sleep</div>
           <div style="font-family:'Nunito',sans-serif; font-size:26px; margin-top:4px;" id="log-actual">8 hr</div>
         </div>
+        <p class="error-text" id="log-duration-error" style="text-align:center;"></p>
 
         <button class="btn btn-primary" style="margin-top:18px;" id="log-save-btn" onclick="saveLog()">Save Sleep</button>
         <button class="btn btn-ghost" style="margin-top:10px; display:none;" id="log-cancel-btn" onclick="cancelEditLog()">Cancel edit</button>
@@ -1060,6 +1079,7 @@ h1,h2,h3{ font-family:'Nunito',sans-serif; font-weight:700; color:var(--text); }
         <div class="field">
           <label>Date</label>
           <div class="input-wrap"><input type="date" id="ev-date"></div>
+          <p class="hint" id="ev-date-hint">Events must be planned at least 3 days in advance.</p>
         </div>
         <div class="field">
           <label>Time</label>
@@ -1178,7 +1198,8 @@ h1,h2,h3{ font-family:'Nunito',sans-serif; font-weight:700; color:var(--text); }
         <div class="card" style="padding:6px 0;">
           <div class="row-between" style="padding:14px 20px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="openProfileModal()"><span>Profile</span><span style="color:var(--text-mute);">&#8250;</span></div>
           <div class="row-between" style="padding:14px 20px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="openGoalModal()"><span>My goal</span><span style="color:var(--text-mute);">&#8250;</span></div>
-          <div class="row-between" style="padding:14px 20px; cursor:pointer;" onclick="openReminderModal()"><span>Reminder</span><span style="color:var(--text-mute);">&#8250;</span></div>
+          <div class="row-between" style="padding:14px 20px; cursor:pointer; border-top:1px solid var(--border);" onclick="openReminderModal()"><span>Reminder</span><span style="color:var(--text-mute);">&#8250;</span></div>
+          <div class="row-between" style="padding:14px 20px; cursor:pointer; border-top:1px solid var(--border);" onclick="replayTutorial()"><span>Replay Tutorial</span><span style="color:var(--text-mute);">&#8250;</span></div>
         </div>
 
         <div class="section-title">Personal</div>
@@ -1403,6 +1424,30 @@ h1,h2,h3{ font-family:'Nunito',sans-serif; font-weight:700; color:var(--text); }
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <!-- Interactive Tutorial overlay -->
+  <div class="tutorial-overlay" id="tutorial-overlay">
+    <div class="tutorial-highlight" id="tutorial-highlight"></div>
+    <div class="tutorial-tooltip" id="tutorial-tooltip">
+      <div class="row-between" style="margin-bottom:8px;">
+        <span class="eyebrow" id="tutorial-progress" style="margin:0;">1 / 5</span>
+        <button class="linklike" onclick="skipTutorial()">Skip Tutorial</button>
+      </div>
+      <div style="display:flex; gap:10px; align-items:flex-start;">
+        <svg width="34" height="34" viewBox="0 0 128 128" fill="none" style="flex-shrink:0;">
+          <path d="M42 53 L32 24 L59 39 Z" fill="#D2B8E8"/><path d="M86 53 L96 24 L69 39 Z" fill="#D2B8E8"/>
+          <ellipse cx="64" cy="74" rx="32" ry="29" fill="#D2B8E8"/>
+          <circle cx="55.5" cy="70" r="3.4" fill="#4A3F66"/><circle cx="72.5" cy="70" r="3.4" fill="#4A3F66"/>
+          <path d="M64 74 L60.5 79 L67.5 79 Z" fill="#EFA0B4"/>
+        </svg>
+        <div>
+          <h3 id="tutorial-title" style="font-size:15px; margin-bottom:4px;">Your Sleep Dashboard</h3>
+          <p class="subtext" id="tutorial-text" style="font-size:13px;">See your sleep debt and tonight's plan here.</p>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" style="width:100%; margin-top:12px;" id="tutorial-next-btn" onclick="tutorialNext()">Next</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1748,6 +1793,16 @@ function saveProfile(){
     err.style.display = 'block';
     return;
   }
+  // Age must be computed from actual day/month/year (getAge already does this
+  // correctly, accounting for whether this year's birthday has occurred yet)
+  // — never just currentYear - birthYear, which would be off by one for
+  // anyone whose birthday hasn't happened yet this year.
+  const dobAge = getAge(dob);
+  if(dobAge < 10 || dobAge > 100){
+    err.textContent = 'Age must be between 10 and 100 years old.';
+    err.style.display = 'block';
+    return;
+  }
   if(isUsernameTaken(username)){
     err.textContent = 'This username is already taken. Please choose another.';
     err.style.display = 'block';
@@ -1939,8 +1994,52 @@ function clockLabelFromHHMM(hhmm){
 }
 function durationFromTimes(sleepTime, wakeTime){
   let s = timeToMinutes(sleepTime), w = timeToMinutes(wakeTime);
-  if(w <= s) w += 24*60;
+  // Strictly LESS than (not <=): wake-up earlier than bedtime crosses
+  // midnight, as before. Wake-up EQUAL to bedtime is no longer silently
+  // treated as a full 24-hour night — that case is caught explicitly by
+  // validateLogDuration() instead, before this function's result is used.
+  if(w < s) w += 24*60;
   return w - s;
+}
+/* Requirements 6-8: validates a Logging entry's times before it can be saved.
+   Returns {valid, message, durationMin}. Checked BOTH live (as the user types,
+   to disable Save and show an inline reason) and again at save time. */
+function validateLogDuration(sleepTime, wakeTime){
+  if(sleepTime === wakeTime){
+    return { valid:false, message:'Bedtime and wake-up time cannot be the same. Please enter a different wake-up time.', durationMin:null };
+  }
+  const durationMin = durationFromTimes(sleepTime, wakeTime);
+  if(durationMin < 15){
+    return { valid:false, message:'Sleep duration is under 15 minutes — please check your bedtime and wake-up time.', durationMin };
+  }
+  if(durationMin > 16*60){
+    return { valid:false, message:'Sleep duration is over 16 hours — please check your bedtime and wake-up time.', durationMin };
+  }
+  return { valid:true, message:'', durationMin };
+}
+/* Live preview + validation for the Logging form: updates the "Actual sleep"
+   number, shows/hides the inline error, and disables Save while invalid —
+   the single place this is computed so the live view and the Save-time
+   check (in saveLog()) can never disagree. */
+function updateLogDurationPreview(){
+  const s = document.getElementById('log-sleep').value;
+  const w = document.getElementById('log-wake').value;
+  const errEl = document.getElementById('log-duration-error');
+  const saveBtn = document.getElementById('log-save-btn');
+  const result = validateLogDuration(s, w);
+  if(result.valid){
+    document.getElementById('log-actual').textContent = minutesToLabel(result.durationMin);
+    errEl.style.display = 'none';
+    saveBtn.disabled = false;
+    saveBtn.style.opacity = '1';
+  }else{
+    document.getElementById('log-actual').textContent = result.durationMin===null ? '–' : minutesToLabel(result.durationMin);
+    errEl.textContent = result.message;
+    errEl.style.display = 'block';
+    saveBtn.disabled = true;
+    saveBtn.style.opacity = '.5';
+  }
+  return result;
 }
 function dailyDebtMin(actualMin){
   return Math.max(0, computeTbaseMin() - actualMin);
@@ -2028,8 +2127,12 @@ function computeTargetSleepMin(tbaseMin, dailyBankingMin, accDebtMin){
 /* Bedtime = Wake Time − (90 × Cycles) + 15 minutes.
    Golden Test 13 / 14: Wake=07:00, Cycles=6 → 22:15.
    (420 − 540 + 15 = −105 → wraps to 22:15 via clockLabelFromMinutes.) */
+/* Bedtime = Target Wake-up − (Cycles × 90 minutes) − 15 minutes
+   (the 15 minutes is prep/wind-down time before actually falling asleep,
+   subtracted along with the sleep-cycle time — not added back).
+   Test: Wake=05:00, 6 cycles → 300 − 540 − 15 = −255 → wraps to 19:45 (7:45 PM previous day). */
 function computeBedtimeMin(wakeMin, cycles){
-  return wakeMin - (cycles * 90) + 15;
+  return wakeMin - (cycles * 90) - 15;
 }
 
 /* Finds the nearest upcoming event that needs Sleep Banking (expected sleep on
@@ -2326,7 +2429,7 @@ function resetLogForm(){
   document.getElementById('log-date').max = todayStr();
   document.getElementById('log-sleep').value = '22:30';
   document.getElementById('log-wake').value = '06:30';
-  document.getElementById('log-actual').textContent = minutesToLabel(durationFromTimes('22:30','06:30'));
+  updateLogDurationPreview();
   document.getElementById('log-save-btn').textContent = 'Save Sleep';
   document.getElementById('log-cancel-btn').style.display = 'none';
 }
@@ -2395,7 +2498,7 @@ function editLogRecord(dateStr){
   document.getElementById('log-date').value = rec.date;
   document.getElementById('log-sleep').value = rec.sleepTime;
   document.getElementById('log-wake').value = rec.wakeTime;
-  document.getElementById('log-actual').textContent = minutesToLabel(rec.durationMin);
+  updateLogDurationPreview();
   document.getElementById('log-save-btn').textContent = 'Update record';
   document.getElementById('log-cancel-btn').style.display = 'block';
   document.querySelector('#screen-logging .scroll').scrollTo({ top:0, behavior:'smooth' });
@@ -2417,7 +2520,16 @@ function saveLog(){
     showToast("That wake-up time hasn't happened yet");
     return;
   }
-  const durationMin = durationFromTimes(sleepTime, wakeTime);
+  // Second, authoritative validation layer (Requirements 6-8) — the same
+  // check the live preview already showed, run again here so a save can
+  // never go through with an invalid duration even if the UI state was
+  // somehow bypassed.
+  const durationCheck = validateLogDuration(sleepTime, wakeTime);
+  if(!durationCheck.valid){
+    showToast(durationCheck.message);
+    return;
+  }
+  const durationMin = durationCheck.durationMin;
   const savedLog = { date: dateVal, sleepTime, wakeTime, durationMin };
 
   const existingIdx = state.logs.findIndex(l=> l.date === dateVal);
@@ -2435,8 +2547,7 @@ function saveLog(){
 }
 document.addEventListener('input', (e)=>{
   if(e.target.id==='log-sleep' || e.target.id==='log-wake'){
-    const s = document.getElementById('log-sleep').value, w = document.getElementById('log-wake').value;
-    document.getElementById('log-actual').textContent = minutesToLabel(durationFromTimes(s,w));
+    updateLogDurationPreview();
   }
   if(e.target.id==='su-username'){ updateUsernameStatus(); }
   if(e.target.id==='su-password'){ updatePasswordChecklist(); }
@@ -2707,7 +2818,11 @@ function openAddEvent(){
   document.getElementById('ev-delete-btn').style.display = 'none';
   document.getElementById('ev-name').value = '';
   document.getElementById('ev-date').value = '';
-  document.getElementById('ev-date').min = todayStr();
+  // Requirement 10: new events must be at least 3 CALENDAR days out — using
+  // shiftDateStr (pure calendar-day arithmetic), not a 72-hour/time-of-day
+  // calculation, so "3 days" means 3 days regardless of the current clock time.
+  document.getElementById('ev-date').min = shiftDateStr(todayStr(), 3);
+  document.getElementById('ev-date-hint').style.display = 'block';
   document.getElementById('ev-time').value = '09:00';
   document.getElementById('ev-sleep').value = '5';
   document.getElementById('ev-bankingdays').value = '4';
@@ -2724,6 +2839,7 @@ function openEditEvent(id){
   document.getElementById('ev-name').value = e.name;
   document.getElementById('ev-date').value = e.date;
   document.getElementById('ev-date').min = '';
+  document.getElementById('ev-date-hint').style.display = 'none';
   document.getElementById('ev-time').value = e.time || '09:00';
   document.getElementById('ev-sleep').value = String(e.expectedHrs);
   document.getElementById('ev-bankingdays').value = String(e.bankingDays || 4);
@@ -2738,6 +2854,13 @@ function submitNewEvent(){
   const bankingDays = Number(document.getElementById('ev-bankingdays').value);
   const note = document.getElementById('ev-note').value.trim();
   if(!name || !date){ showToast('Add an event name and date'); return; }
+  // Requirement 10: only enforced when CREATING a new event, using calendar-day
+  // arithmetic (daysBetweenDates), not a 72-hour cutoff — an event exactly 3
+  // calendar days out is valid regardless of what time it currently is.
+  if(!editingEventId && daysBetweenDates(todayStr(), date) < 3){
+    showToast('Events must be planned at least 3 days in advance.');
+    return;
+  }
 
   let savedEvent;
   if(editingEventId){
@@ -2886,6 +3009,8 @@ function saveProfileEdit(){
   const exercise = document.getElementById('pf-exercise').value;
   const targetWake = document.getElementById('pf-wake').value;
   if(!name || !dob || !genderEl || !targetWake){ showToast('Please fill in all fields'); return; }
+  const dobAge = getAge(dob);
+  if(dobAge < 10 || dobAge > 100){ showToast('Age must be between 10 and 100 years old.'); return; }
   state.profile.name = name;
   state.profile.dob = dob;
   state.profile.gender = genderEl.dataset.val;
@@ -2985,10 +3110,131 @@ async function backfillSyncToSupabase(){
   }
 }
 
+/* ---------------- Interactive Tutorial ---------------- */
+/* Requirement 3 + "Interactive App Tutorial": a 5-step guided walkthrough of
+   the real app (Home → Logging → Stats → Event → Me), shown to first-time
+   users right after Get Started. Status is tracked separately from the
+   intro-carousel Onboarding above, so refreshing mid-tutorial resumes at the
+   same step, and completing/skipping it means it never auto-shows again —
+   but stays reachable any time via Me → Replay Tutorial. */
+const TUTORIAL_STATUS_KEY = 'nox:tutorial-status';
+const TUTORIAL_STEP_KEY = 'nox:tutorial-step';
+const TUTORIAL_STEPS = [
+  { screen:'screen-home', selector:'#ai-advice-card',
+    title:'Your Sleep Dashboard', text:"See your sleep debt, tonight's plan, and Nox's advice here every time you open the app." },
+  { screen:'screen-logging', selector:'#log-save-btn',
+    title:'Log Your Sleep', text:'Record last night\u2019s bedtime and wake-up time here \u2014 this is what Nox uses to calculate everything else.' },
+  { screen:'screen-stat', selector:'.stat-summary-row',
+    title:'Track Your Trends', text:'See your average sleep and sleep debt over the last 7 or 30 days.' },
+  { screen:'screen-event', selector:'#screen-event .icon-btn',
+    title:'Plan for Busy Days', text:'Add an upcoming event here and Nox will help you bank extra sleep beforehand.' },
+  { screen:'screen-me', selector:'#screen-me .card',
+    title:'Your Profile', text:'Manage your profile, goals, and reminders from here.' }
+];
+let tutorialStepIdx = 0;
+function startTutorial(fromStep){
+  tutorialStepIdx = Math.max(0, Math.min(fromStep || 0, TUTORIAL_STEPS.length - 1));
+  try{ localStorage.setItem(TUTORIAL_STATUS_KEY, 'in_progress'); }catch(err){ /* ignore */ }
+  showTutorialStep(tutorialStepIdx);
+}
+function showTutorialStep(idx){
+  tutorialStepIdx = idx;
+  try{ localStorage.setItem(TUTORIAL_STEP_KEY, String(idx)); }catch(err){ /* ignore */ }
+  const step = TUTORIAL_STEPS[idx];
+  setNav(step.screen); // real navigation — same screens/render functions the user would actually use
+  document.getElementById('tutorial-title').textContent = step.title;
+  document.getElementById('tutorial-text').textContent = step.text;
+  document.getElementById('tutorial-progress').textContent = `${idx+1} / ${TUTORIAL_STEPS.length}`;
+  document.getElementById('tutorial-next-btn').textContent = (idx === TUTORIAL_STEPS.length-1) ? 'Finish' : 'Next';
+  document.getElementById('tutorial-overlay').classList.add('active');
+  // Wait for the just-triggered screen render to settle before measuring
+  // the target element's real position.
+  requestAnimationFrame(()=> requestAnimationFrame(()=> positionTutorialHighlight(step.selector)));
+}
+function positionTutorialHighlight(selector){
+  const target = document.querySelector(selector);
+  const highlight = document.getElementById('tutorial-highlight');
+  const tooltip = document.getElementById('tutorial-tooltip');
+  const phone = document.querySelector('.phone');
+  if(!target || !phone){ highlight.style.display = 'none'; return; }
+  const targetRect = target.getBoundingClientRect();
+  const phoneRect = phone.getBoundingClientRect();
+  const pad = 6;
+  const top = targetRect.top - phoneRect.top - pad;
+  const left = targetRect.left - phoneRect.left - pad;
+  const width = targetRect.width + pad*2;
+  const height = targetRect.height + pad*2;
+  highlight.style.display = 'block';
+  highlight.style.top = top + 'px';
+  highlight.style.left = left + 'px';
+  highlight.style.width = width + 'px';
+  highlight.style.height = height + 'px';
+  // Tooltip goes below the highlight if there's room, otherwise above it —
+  // so it never covers the very thing being explained.
+  const phoneHeight = phoneRect.height;
+  const spaceBelow = phoneHeight - (top + height);
+  if(spaceBelow > 190){
+    tooltip.style.top = (top + height + 14) + 'px';
+    tooltip.style.bottom = 'auto';
+  }else{
+    tooltip.style.top = 'auto';
+    tooltip.style.bottom = (phoneHeight - top + 14) + 'px';
+  }
+}
+function tutorialNext(){
+  if(tutorialStepIdx < TUTORIAL_STEPS.length - 1){
+    showTutorialStep(tutorialStepIdx + 1);
+  }else{
+    completeTutorial();
+  }
+}
+function completeTutorial(){
+  try{
+    localStorage.setItem(TUTORIAL_STATUS_KEY, 'completed');
+    localStorage.removeItem(TUTORIAL_STEP_KEY);
+  }catch(err){ /* ignore */ }
+  document.getElementById('tutorial-overlay').classList.remove('active');
+  setNav('screen-home');
+}
+function skipTutorial(){
+  try{
+    localStorage.setItem(TUTORIAL_STATUS_KEY, 'skipped');
+    localStorage.removeItem(TUTORIAL_STEP_KEY);
+  }catch(err){ /* ignore */ }
+  document.getElementById('tutorial-overlay').classList.remove('active');
+  setNav('screen-home');
+}
+function replayTutorial(){
+  startTutorial(0);
+}
+function finishGetStartedAndStartTutorial(){
+  enterApp();
+  startTutorial(0);
+}
+window.addEventListener('resize', ()=>{
+  if(document.getElementById('tutorial-overlay').classList.contains('active')){
+    positionTutorialHighlight(TUTORIAL_STEPS[tutorialStepIdx].selector);
+  }
+});
+
 /* ---------------- Startup: load persisted data first ---------------- */
 const ONBOARDING_KEY = 'nox:onboarding-complete';
+/* Date-picker bounds so an out-of-range birth date can't even be selected
+   in the first place (Requirement 4's first validation layer). Computed
+   with day/month precision from today's real date, not just year math. */
+function setupDobBounds(){
+  const [y, m, d] = todayStr().split('-').map(Number);
+  const pad = n => String(n).padStart(2,'0');
+  const minDob = `${y-100}-${pad(m)}-${pad(d)}`; // oldest allowed: exactly 100 today
+  const maxDob = `${y-10}-${pad(m)}-${pad(d)}`;  // youngest allowed: exactly 10 today
+  ['su-dob','pf-dob'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el){ el.min = minDob; el.max = maxDob; }
+  });
+}
 async function init(){
   renderBottomNav();
+  setupDobBounds();
   const loading = document.getElementById('screen-loading');
   const found = await loadState();
   loading.classList.remove('active');
@@ -2997,13 +3243,33 @@ async function init(){
   try{ onboarded = localStorage.getItem(ONBOARDING_KEY) === 'true'; }catch(err){ onboarded = false; }
 
   if(!onboarded){
-    renderObDots();
+    // Requirement 2: resume the intro carousel at whatever step it was on
+    // before a refresh, instead of always restarting at page 1.
+    let savedStep = 0;
+    try{
+      const raw = localStorage.getItem(ONBOARDING_STEP_KEY);
+      if(raw !== null) savedStep = Math.max(0, Math.min(Number(raw) || 0, OB_STEP_COUNT-1));
+    }catch(err){ savedStep = 0; }
+    showObStep(savedStep);
     goTo('screen-onboarding');
     return;
   }
   if(found && state.profile){
     enterApp();
     backfillSyncToSupabase();
+    // Requirement 3 / Interactive Tutorial: only resume automatically if the
+    // tutorial was genuinely left "in progress" (i.e. the user refreshed
+    // mid-tutorial during their first session). This deliberately does NOT
+    // trigger for any existing account that predates this feature — those
+    // have no 'in_progress' status at all, so nothing changes for them.
+    let tutorialStatus = null, tutorialStep = 0;
+    try{
+      tutorialStatus = localStorage.getItem(TUTORIAL_STATUS_KEY);
+      tutorialStep = Number(localStorage.getItem(TUTORIAL_STEP_KEY)) || 0;
+    }catch(err){ /* ignore */ }
+    if(tutorialStatus === 'in_progress'){
+      startTutorial(tutorialStep);
+    }
   }else{
     goTo('screen-welcome');
   }
@@ -3011,6 +3277,7 @@ async function init(){
 
 /* ---------------- Onboarding ---------------- */
 const OB_STEP_COUNT = 7;
+const ONBOARDING_STEP_KEY = 'nox:onboarding-step';
 let obStep = 0;
 function renderObDots(){
   const dots = document.getElementById('ob-dots');
@@ -3022,13 +3289,16 @@ function renderObDots(){
   }
 }
 function showObStep(n){
-  obStep = n;
+  obStep = Math.max(0, Math.min(n, OB_STEP_COUNT-1)); // never past first/last page
   document.querySelectorAll('.ob-panel').forEach(p=>{
-    p.classList.toggle('active', Number(p.dataset.step) === n);
+    p.classList.toggle('active', Number(p.dataset.step) === obStep);
   });
   renderObDots();
-  document.getElementById('ob-next-btn').textContent = (n === OB_STEP_COUNT-1) ? "Let's go" : 'Next';
+  document.getElementById('ob-next-btn').textContent = (obStep === OB_STEP_COUNT-1) ? "Let's go" : 'Next';
   document.querySelector('#screen-onboarding .scroll').scrollTo({ top:0 });
+  // Requirement 2: persist the step so a refresh mid-onboarding resumes here
+  // instead of restarting at page 1.
+  try{ localStorage.setItem(ONBOARDING_STEP_KEY, String(obStep)); }catch(err){ /* ignore */ }
 }
 function obNext(){
   if(obStep < OB_STEP_COUNT-1){
@@ -3037,9 +3307,38 @@ function obNext(){
     goTo('screen-terms');
   }
 }
+function obPrev(){
+  if(obStep > 0){ showObStep(obStep-1); }
+}
 function skipOnboarding(){
   goTo('screen-terms');
 }
+
+/* Requirement 1: swipe left/right through Onboarding, alongside the existing
+   Next button. A horizontal-drag threshold (and requiring more horizontal
+   than vertical movement) keeps normal taps/vertical scrolling from
+   accidentally triggering a page change. */
+(function setupOnboardingSwipe(){
+  const el = document.querySelector('#screen-onboarding .scroll');
+  if(!el) return;
+  let startX = 0, startY = 0, tracking = false;
+  const SWIPE_THRESHOLD = 45; // px — deliberate swipe, not an incidental drag
+  el.addEventListener('touchstart', (e)=>{
+    if(e.touches.length !== 1) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    tracking = true;
+  }, { passive:true });
+  el.addEventListener('touchend', (e)=>{
+    if(!tracking) return;
+    tracking = false;
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const dx = endX - startX, dy = endY - startY;
+    if(Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) < Math.abs(dy)) return; // not a horizontal swipe
+    if(dx < 0){ obNext(); } else { obPrev(); }
+  }, { passive:true });
+})();
 
 /* ---------------- Terms & consent ---------------- */
 const consentState = { c1:false, c2:false, c3:false };
