@@ -1545,8 +1545,22 @@ async function loadState(){
   }
 }
 async function clearAllData(){
+  // Root cause of the Onboarding/Terms-being-skipped regression: this used to
+  // remove ONLY the profile/logs/events key, while its own confirmation
+  // dialog promises "This deletes all your Nox data on this device." The
+  // onboarding-complete, tutorial-status, and consent flags were silently
+  // left behind, so the very next launch correctly-but-misleadingly treated
+  // the device as already onboarded and skipped straight past Welcome. A
+  // genuinely fresh page load (truly empty localStorage) was never affected —
+  // only this "Clear all data" path was.
   try{
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(ONBOARDING_KEY);
+    localStorage.removeItem(ONBOARDING_STEP_KEY);
+    localStorage.removeItem(TUTORIAL_STATUS_KEY);
+    localStorage.removeItem(TUTORIAL_STEP_KEY);
+    localStorage.removeItem(USERNAME_REGISTRY_KEY);
+    localStorage.removeItem('nox:consent');
   }catch(err){ /* ignore */ }
   state.profile = null; state.logs = []; state.events = [];
 }
@@ -3054,7 +3068,12 @@ function toggleReminder(key){
 async function resetData(){
   if(!confirm('This deletes all your Nox data on this device. Continue?')) return;
   await clearAllData();
-  goTo('screen-welcome');
+  // A full reset now genuinely means "start over" — go to the very first
+  // screen, matching what a real fresh install shows, instead of jumping to
+  // Welcome (which skipped Onboarding/Terms even though the flags were cleared).
+  showObStep(0);
+  renderObDots();
+  goTo('screen-onboarding');
   showToast('Data cleared');
 }
 
